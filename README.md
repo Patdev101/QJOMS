@@ -190,7 +190,9 @@ Covers the full quote-to-cash flow, billing and payments, history, master data, 
 | `php artisan migrate` | Apply new database changes, **keeping** existing data |
 | `php artisan migrate:fresh` | ⚠️ Delete **everything** and recreate empty tables |
 | `php artisan migrate:fresh --seed` | ⚠️ Delete everything, then add the admin account + 3 sample customers + 6 sample tariffs |
+| `php artisan db:seed --class=LiveSeeder` | **Live server start:** admin account + NSRMS customer + NSRMS tariff, no sample data (safe to run again) |
 | `php artisan db:seed --class=AdminUserSeeder` | Add the admin account (safe to run again) |
+| `php artisan db:seed --class=NsrmsCustomerSeeder` | Add the Norman Ship Repair & Machine Shop customer profile (safe to run again) |
 | `php artisan db:seed --class=NsrmsTariffSeeder` | Load the NSRMS *Hull, Hold & Tank Preservation* tariff (20 services; safe to run again, keeps costs already entered) |
 | `php artisan db:seed --class=DemoSeeder` | Add sample quotations, job orders and an invoice (needs the sample customers) |
 
@@ -230,7 +232,7 @@ DELETE FROM quotations;
 | `app/Http/Middleware/HandleInertiaRequests.php` | Data shared with every page (signed-in user, messages, menu counts) |
 | `app/Models/` | `User`, `Customer`, `Tariff`, `Quotation`, `QuotationLine`, `JobOrder`, `Invoice`, `Payment`, `Activity` |
 | `database/migrations/` | Table definitions |
-| `database/seeders/` | `DatabaseSeeder`, `AdminUserSeeder`, `NsrmsTariffSeeder`, `DemoSeeder` |
+| `database/seeders/` | `DatabaseSeeder` (dev samples), `LiveSeeder` (live start), `AdminUserSeeder`, `NsrmsCustomerSeeder`, `NsrmsTariffSeeder`, `DemoSeeder` |
 | `tests/Feature/` | `QuotationFlowTest`, `LoginTest` |
 
 ---
