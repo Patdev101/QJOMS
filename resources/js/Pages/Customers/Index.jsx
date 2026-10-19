@@ -82,7 +82,7 @@ export default function Index({ customers, filters }) {
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td>{c.contact_person || '—'}<div className="cell-sub">{c.contact_no}</div></td>
+                                            <td>{c.contact_person || '—'}<div className="cell-sub">{c.contact_no}</div>{c.email && <div className="cell-sub">{c.email}</div>}</td>
                                             <td>
                                                 {c.discount_percent > 0
                                                     ? <span className="tag discount"><Icon name="tag" size={13} /> {c.discount_percent}% off</span>

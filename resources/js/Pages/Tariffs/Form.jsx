@@ -5,8 +5,11 @@ import AppLayout from '../../Layouts/AppLayout';
 import { marginClass } from './Index';
 
 // add a service/item, or edit one when `tariff` is given
-export default function Form({ tariff, type }) {
-    const form = useForm(tariff ?? { type, code: '', description: '', uom: '', unit: '', cost: '0', price: '0', active: true });
+export default function Form({ tariff, type, groups = {}, preset = {} }) {
+    const form = useForm(tariff ?? {
+        type, category: preset.category ?? '', subcategory: preset.subcategory ?? '',
+        code: '', description: '', uom: '', unit: '', cost: '0', price: '0', active: true,
+    });
     const { data, setData, errors, processing } = form;
     const messages = [...new Set(Object.values(errors))];
     const field = (name) => ({ id: name, value: data[name], className: errors[name] ? 'is-invalid' : '', onChange: (e) => setData(name, e.target.value) });
@@ -53,6 +56,17 @@ export default function Form({ tariff, type }) {
                         </div>
 
                         <div className="grid-2 field-gap">
+                            {/* suggestions come from categories already in use, so spelling stays the same */}
+                            <div className="field">
+                                <label htmlFor="category">Category</label>
+                                <input {...field('category')} list="categoryList" placeholder="e.g. Gritblasting" />
+                                <datalist id="categoryList">{Object.keys(groups).map((c) => <option key={c} value={c} />)}</datalist>
+                            </div>
+                            <div className="field">
+                                <label htmlFor="subcategory">Sub-category</label>
+                                <input {...field('subcategory')} list="subcategoryList" placeholder="e.g. High pressure washing" />
+                                <datalist id="subcategoryList">{(groups[data.category] ?? []).map((s) => <option key={s} value={s} />)}</datalist>
+                            </div>
                             <div className="field">
                                 <label htmlFor="code">Code</label>
                                 <input {...field('code')} className={`mono ${errors.code ? 'is-invalid' : ''}`} placeholder="e.g. SVC-004" autoFocus />

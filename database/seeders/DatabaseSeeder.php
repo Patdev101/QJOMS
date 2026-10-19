@@ -11,6 +11,8 @@ class DatabaseSeeder extends Seeder
     /** sample customers and tariffs so the screens are not empty on first run */
     public function run(): void
     {
+        $this->call(AdminUserSeeder::class);
+
         Customer::create(['name' => 'ABC Construction', 'address' => 'Calapan City, Oriental Mindoro', 'contact_person' => 'Juan Dela Cruz', 'contact_no' => '0917 123 4567', 'discount_percent' => 10]);
         Customer::create(['name' => 'Bayside Shipping', 'address' => 'Batangas Port', 'contact_person' => 'Maria Santos', 'contact_no' => '0918 765 4321', 'discount_percent' => 5]);
         Customer::create(['name' => 'Walk-in Customer', 'discount_percent' => 0]);

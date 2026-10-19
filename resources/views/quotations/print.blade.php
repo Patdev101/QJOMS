@@ -30,9 +30,21 @@
         .totals .grand { margin-top: 6px; padding: 10px; border-radius: 6px; background: #1a3029; color: #fff; font-size: 16px; font-weight: 800; }
         .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 70px; margin-top: 70px; text-align: center; color: #6f665a; }
         .sign div { padding-top: 6px; border-top: 1px solid #1f1c18; }
+        /* Any paper size or orientation (picked in the print dialog). Margin 0 stops the browser adding its own
+           date, title, web address and page number; the body padding gives the real margins instead. */
+        @page { margin: 0; }
+        .sign, .totals { break-inside: avoid; }
         @media print {
             .toolbar { display: none; }
-            body { margin: 0 auto; }
+            body { max-width: none; margin: 0; padding: 14mm 16mm; }
+            .sign { margin-top: 48px; }
+        }
+        /* landscape pages are short: tighter spacing so it still fits on one page */
+        @media print and (orientation: landscape) {
+            body { padding: 9mm 14mm; }
+            .info { margin: 12px 0 14px; }
+            td, th { padding: 5px 10px; }
+            .sign { margin-top: 30px; }
         }
     </style>
 </head>

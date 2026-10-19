@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Activity;
 use App\Models\JobOrder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -63,14 +64,23 @@ class JobOrderController extends Controller
             ],
             'statuses' => JobOrder::STATUSES,
             'quotation' => $jobOrder->quotation->details(),
+            'invoice' => $jobOrder->invoice ? ['id' => $jobOrder->invoice->id, 'invoice_no' => $jobOrder->invoice->invoice_no] : null,
+            'history' => Activity::timeline($jobOrder->quotation_id),
         ]);
     }
 
     public function updateStatus(Request $request, JobOrder $jobOrder)
     {
-        $data = $request->validate(['status' => ['required', Rule::in(array_keys(JobOrder::STATUSES))]]);
+        // "Billed" comes only from creating the invoice, and an invoiced job order can't go back
+        $data = $request->validate(['status' => ['required', Rule::in(['open', 'ongoing', 'completed'])]]);
 
+        if ($jobOrder->invoice()->exists()) {
+            return back()->with('error', 'This job order already has an invoice, so its status can no longer change.');
+        }
+
+        $from = JobOrder::STATUSES[$jobOrder->status];
         $jobOrder->update($data);
+        Activity::log($jobOrder, 'status', "Job order {$jobOrder->jo_no}: {$from} → ".JobOrder::STATUSES[$data['status']]);
 
         return back()->with('success', 'Job order marked as '.JobOrder::STATUSES[$data['status']].'.');
     }

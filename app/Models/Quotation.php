@@ -61,8 +61,9 @@ class Quotation extends Model
     /** everything the quotation and job order pages show */
     public function details(): array
     {
-        $this->loadMissing('customer', 'lines', 'jobOrder');
+        $this->loadMissing('customer', 'lines', 'jobOrder.invoice.payments');
         $jo = $this->jobOrder;
+        $invoice = $jo?->invoice;
 
         return [
             'id' => $this->id,
@@ -85,6 +86,14 @@ class Quotation extends Model
             'margin' => $this->margin(),
             'editable' => $this->isEditable(),
             'job_order' => $jo ? ['id' => $jo->id, 'jo_no' => $jo->jo_no, 'status' => $jo->status, 'status_label' => JobOrder::STATUSES[$jo->status]] : null,
+            // for the Quotation → Job order → Invoice → Paid strip shown on all three pages
+            'invoice' => $invoice ? [
+                'id' => $invoice->id,
+                'invoice_no' => $invoice->invoice_no,
+                'status' => $invoice->status(),
+                'status_label' => Invoice::STATUSES[$invoice->status()],
+                'paid_on' => $invoice->status() === 'paid' ? $invoice->payments->max('date')?->format('M j, Y') : null,
+            ] : null,
             'lines' => $this->lines->map(fn ($l) => [
                 'id' => $l->id,
                 'type' => $l->type,

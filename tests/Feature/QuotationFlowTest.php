@@ -23,6 +23,9 @@ class QuotationFlowTest extends TestCase
     {
         parent::setUp();
 
+        // every page needs a signed-in user
+        $this->actingAs(\App\Models\User::factory()->create(['name' => 'Test Staff']));
+
         $this->customer = Customer::create(['name' => 'ABC', 'discount_percent' => 10]);
         $this->service = Tariff::create(['type' => 'service', 'code' => 'S1', 'description' => 'Welding', 'uom' => 'hr', 'cost' => 300, 'price' => 500]);
         $this->item = Tariff::create(['type' => 'item', 'code' => 'I1', 'description' => 'Plate', 'uom' => 'pc', 'cost' => 1000, 'price' => 1500]);
@@ -83,9 +86,61 @@ class QuotationFlowTest extends TestCase
         $this->get("/job-orders/{$jobOrder->id}")->assertOk()->assertSee($jobOrder->jo_no);
 
         $this->patch("/job-orders/{$jobOrder->id}/status", ['status' => 'completed'])->assertRedirect();
-        $this->patch("/job-orders/{$jobOrder->id}/status", ['status' => 'billed'])->assertRedirect();
+        $this->post("/job-orders/{$jobOrder->id}/invoice", ['date' => '2026-10-16', 'due_date' => '2026-11-15'])->assertRedirect();
         $this->assertSame('billed', $jobOrder->fresh()->status);
         $this->get('/job-orders?status=billed')->assertOk()->assertSee($jobOrder->jo_no);
+    }
+
+    public function test_completed_job_order_is_invoiced_and_paid_with_history(): void
+    {
+        $this->post('/quotations', [
+            'date' => '2026-10-19', 'customer_id' => $this->customer->id, 'discount_percent' => 0,
+            'lines' => [['type' => 'service', 'tariff_id' => $this->service->id, 'qty' => 2, 'unit_price' => 500]], // ₱1,000
+        ]);
+        $quotation = Quotation::firstOrFail();
+        $this->post("/quotations/{$quotation->id}/approve");
+        $jobOrder = JobOrder::firstOrFail();
+
+        // can't invoice before the work is completed, and "billed" can't be set by hand
+        $this->post("/job-orders/{$jobOrder->id}/invoice", ['date' => '2026-10-19', 'due_date' => '2026-11-18']);
+        $this->assertDatabaseCount('invoices', 0);
+        $this->patch("/job-orders/{$jobOrder->id}/status", ['status' => 'billed'])->assertSessionHasErrors('status');
+
+        $this->patch("/job-orders/{$jobOrder->id}/status", ['status' => 'completed']);
+        $this->post("/job-orders/{$jobOrder->id}/invoice", ['date' => '2026-10-19', 'due_date' => '2026-10-01'])->assertSessionHasErrors('due_date');
+        $this->post("/job-orders/{$jobOrder->id}/invoice", ['date' => '2026-10-19', 'due_date' => '2026-11-18', 'notes' => '30 days']);
+
+        $invoice = \App\Models\Invoice::firstOrFail();
+        $this->assertSame('INV-'.now()->year.'-0001', $invoice->invoice_no);
+        $this->assertEquals(1000, $invoice->amount);
+        $this->assertSame('billed', $jobOrder->fresh()->status);
+        $this->assertSame('unpaid', $invoice->status());
+
+        // an invoiced job order can't move back
+        $this->patch("/job-orders/{$jobOrder->id}/status", ['status' => 'completed'])->assertSessionHas('error');
+        $this->assertSame('billed', $jobOrder->fresh()->status);
+
+        foreach (['/invoices', '/invoices?status=unpaid', "/invoices/{$invoice->id}", "/invoices/{$invoice->id}/print", "/job-orders/{$jobOrder->id}"] as $page) {
+            $this->get($page)->assertOk();
+        }
+
+        // payments: more than the balance is refused; partial, then full
+        $this->post("/invoices/{$invoice->id}/payments", ['date' => '2026-10-20', 'amount' => 1500, 'method' => 'cash'])->assertSessionHasErrors('amount');
+        $this->post("/invoices/{$invoice->id}/payments", ['date' => '2026-10-20', 'amount' => 400, 'method' => 'cash']);
+        $this->assertSame('partial', $invoice->fresh()->status());
+        $this->assertEquals(600, $invoice->fresh()->balance());
+        $this->post("/invoices/{$invoice->id}/payments", ['date' => '2026-10-21', 'amount' => 600, 'method' => 'gcash', 'reference' => 'GC-1']);
+        $this->assertSame('paid', $invoice->fresh()->status());
+        $this->get("/invoices/{$invoice->id}/print")->assertSee('PAID');
+
+        // removing a payment puts the money back on the balance
+        $this->delete('/payments/'.$invoice->payments()->latest('id')->first()->id);
+        $this->assertEquals(600, $invoice->fresh()->balance());
+
+        // the whole story is in the history
+        $actions = \App\Models\Activity::where('quotation_id', $quotation->id)->orderBy('id')->pluck('action')->all();
+        $this->assertSame(['created', 'approved', 'status', 'invoiced', 'payment', 'payment', 'payment_removed'], $actions);
+        $this->get("/quotations/{$quotation->id}")->assertSee('payment_removed')->assertSee('INV-'.now()->year.'-0001');
     }
 
     public function test_saving_opens_the_new_quotation(): void

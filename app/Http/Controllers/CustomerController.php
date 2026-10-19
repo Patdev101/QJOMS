@@ -23,6 +23,7 @@ class CustomerController extends Controller
                 'address' => $c->address,
                 'contact_person' => $c->contact_person,
                 'contact_no' => $c->contact_no,
+                'email' => $c->email,
                 'discount_percent' => (float) $c->discount_percent,
                 'quotations_count' => $c->quotations_count,
             ]);
@@ -54,6 +55,7 @@ class CustomerController extends Controller
                 'address' => (string) $customer->address,
                 'contact_person' => (string) $customer->contact_person,
                 'contact_no' => (string) $customer->contact_no,
+                'email' => (string) $customer->email,
                 'discount_percent' => (string) (float) $customer->discount_percent,
             ],
         ]);
@@ -84,6 +86,7 @@ class CustomerController extends Controller
             'address' => 'nullable|string|max:255',
             'contact_person' => 'nullable|string|max:255',
             'contact_no' => 'nullable|string|max:50',
+            'email' => 'nullable|email|max:255',
             'discount_percent' => 'required|numeric|min:0|max:100',
         ]);
     }

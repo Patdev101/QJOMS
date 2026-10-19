@@ -37,15 +37,20 @@ class HandleInertiaRequests extends Middleware
     {
         return [
             ...parent::share($request),
+            // the signed-in user (null on the sign-in page)
+            'auth' => ['user' => fn () => $request->user()?->only('id', 'name', 'email')],
             // the green "saved" message after an action
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
             ],
-            'activeJobs' => fn () => \App\Models\JobOrder::whereIn('status', ['open', 'ongoing'])->count(),
             'today' => now()->format('l, F j, Y'),
-            // the number beside "Quotations" in the menu
-            'pendingCount' => fn () => \App\Models\Quotation::where('status', 'pending')->count(),
+            // the numbers beside the menu items — only for signed-in users
+            'activeJobs' => fn () => $request->user() ? \App\Models\JobOrder::whereIn('status', ['open', 'ongoing'])->count() : 0,
+            'unpaidInvoices' => fn () => $request->user() // invoices with money still owed
+                ? \App\Models\Invoice::whereRaw('amount > (select coalesce(sum(amount), 0) from payments where payments.invoice_id = invoices.id)')->count()
+                : 0,
+            'pendingCount' => fn () => $request->user() ? \App\Models\Quotation::where('status', 'pending')->count() : 0,
         ];
     }
 }

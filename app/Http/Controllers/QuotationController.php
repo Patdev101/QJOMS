@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Activity;
 use App\Models\Customer;
 use App\Models\JobOrder;
 use App\Models\Quotation;
@@ -58,12 +59,17 @@ class QuotationController extends Controller
             return $this->save($request, $quotation);
         });
 
+        Activity::log($quotation, 'created', "Quotation {$quotation->quotation_no} created for ₱".number_format($quotation->grand_total, 2));
+
         return redirect()->route('quotations.show', $quotation)->with('success', "Quotation {$quotation->quotation_no} saved.");
     }
 
     public function show(Quotation $quotation)
     {
-        return Inertia::render('Quotations/Show', ['quotation' => $quotation->details()]);
+        return Inertia::render('Quotations/Show', [
+            'quotation' => $quotation->details(),
+            'history' => Activity::timeline($quotation->id),
+        ]);
     }
 
     public function print(Quotation $quotation)
@@ -88,7 +94,11 @@ class QuotationController extends Controller
             return redirect()->route('quotations.show', $quotation)->with('error', 'An approved quotation can no longer be edited.');
         }
 
+        $before = (float) $quotation->grand_total;
         DB::transaction(fn () => $this->save($request, $quotation));
+        Activity::log($quotation, 'revised', 'Quotation revised'.($before != $quotation->grand_total
+            ? ': total ₱'.number_format($before, 2).' → ₱'.number_format($quotation->grand_total, 2)
+            : ''));
 
         return redirect()->route('quotations.show', $quotation)->with('success', 'Quotation revised.');
     }
@@ -111,6 +121,8 @@ class QuotationController extends Controller
             ]);
         });
 
+        Activity::log($quotation, 'approved', "Approved by the customer; job order {$jobOrder->jo_no} created");
+
         return redirect()->route('job-orders.show', $jobOrder)->with('success', "Quotation approved. Job Order {$jobOrder->jo_no} created.");
     }
 
@@ -120,6 +132,7 @@ class QuotationController extends Controller
             return back()->with('error', 'An approved quotation cannot be deleted.');
         }
 
+        Activity::log($quotation, 'deleted', "Quotation {$quotation->quotation_no} deleted");
         $quotation->delete();
 
         return redirect()->route('quotations.index')->with('success', 'Quotation deleted.');
@@ -152,7 +165,7 @@ class QuotationController extends Controller
                 ->map(fn ($c) => [...$c->toArray(), 'discount_percent' => (float) $c->discount_percent]),
             // inactive tariffs still count when an older quotation already uses them
             'tariffs' => Tariff::where('active', true)->orWhereIn('id', $quotation->lines->pluck('tariff_id')->filter())
-                ->orderBy('code')->get(['id', 'type', 'code', 'description', 'uom', 'unit', 'cost', 'price'])
+                ->orderBy('code')->get(['id', 'type', 'category', 'subcategory', 'code', 'description', 'uom', 'unit', 'cost', 'price'])
                 ->map(fn ($t) => [...$t->toArray(), 'cost' => (float) $t->cost, 'price' => (float) $t->price]),
         ]);
     }

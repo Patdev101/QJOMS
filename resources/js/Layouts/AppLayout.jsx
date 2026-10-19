@@ -4,7 +4,19 @@ import Icon from '../Components/Icon';
 
 // page frame: top menu (desktop), slide-out menu (phones), success message
 export default function AppLayout({ title, active, children }) {
-    const { flash, today, pendingCount, activeJobs } = usePage().props;
+    const { auth, flash, today, pendingCount, activeJobs, unpaidInvoices } = usePage().props;
+    const user = auth?.user;
+    const initials = (user?.name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+    const signOut = () => router.post('/logout');
+    const [userOpen, setUserOpen] = useState(false);
+    useEffect(() => {
+        if (! userOpen) return undefined;
+        const onClick = (e) => { if (! e.target.closest('.account')) setUserOpen(false); };
+        const onKey = (e) => { if (e.key === 'Escape') setUserOpen(false); };
+        document.addEventListener('click', onClick);
+        document.addEventListener('keydown', onKey);
+        return () => { document.removeEventListener('click', onClick); document.removeEventListener('keydown', onKey); };
+    }, [userOpen]);
     const [menuOpen, setMenuOpen] = useState(false);
     const [toast, setToast] = useState(null);
 
@@ -27,6 +39,7 @@ export default function AppLayout({ title, active, children }) {
         { key: 'dashboard', href: '/', icon: 'layout', label: 'Dashboard' },
         { key: 'quotations', href: '/quotations', icon: 'file-text', label: 'Quotations', count: pendingCount, countTitle: 'Waiting for customer approval' },
         { key: 'job-orders', href: '/job-orders', icon: 'clipboard', label: 'Job orders', count: activeJobs, countTitle: 'In progress', soft: true },
+        { key: 'invoices', href: '/invoices', icon: 'receipt', label: 'Invoices', count: unpaidInvoices, countTitle: 'Not fully paid', soft: true },
     ];
     const masterData = [
         { key: 'customers', href: '/customers', icon: 'users', label: 'Customer profiles', hint: 'Contacts and discounts' },
@@ -88,6 +101,23 @@ export default function AppLayout({ title, active, children }) {
                     </nav>
                     <div className="topnav-right">
                         <Link href="/quotations/create" className="cta"><Icon name="plus" /> New quotation</Link>
+                        {user && (
+                            <div className={`dropdown account${userOpen ? ' open' : ''}`}
+                                 onBlur={(e) => { if (! e.currentTarget.contains(e.relatedTarget)) setUserOpen(false); }}>
+                                <button type="button" className="account-btn" aria-expanded={userOpen} onClick={() => setUserOpen(! userOpen)}>
+                                    <span className="avatar">{initials}</span>
+                                    <span className="who-name">{user.name}</span>
+                                    <Icon name="chevron-down" size={15} className="chev" />
+                                </button>
+                                <div className="dropdown-menu account-menu">
+                                    <div className="account-who">
+                                        <span className="avatar">{initials}</span>
+                                        <span><b>{user.name}</b><small>{user.email}</small></span>
+                                    </div>
+                                    <button type="button" className="account-item" onClick={signOut}><Icon name="arrow-right" size={16} /> Sign out</button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </header>
@@ -111,7 +141,11 @@ export default function AppLayout({ title, active, children }) {
                         </Link>
                     ))}
                 </nav>
-                <div className="sidebar-foot">{today}</div>
+                <div className="sidebar-foot">
+                    {user && <div style={{ color: '#fff', fontWeight: 600 }}>{user.name}<div style={{ fontWeight: 400 }}>{user.email}</div></div>}
+                    {today}
+                    {user && <button type="button" className="signout" style={{ marginTop: 10 }} onClick={signOut}>Sign out</button>}
+                </div>
             </aside>
             <div className="scrim" onClick={() => setMenuOpen(false)} />
 

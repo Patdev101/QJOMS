@@ -82,9 +82,7 @@ export default function QuotationDetails({ q }) {
                         <div className="staff-box-title"><Icon name="lock" size={14} /> Staff only · not printed</div>
                         <div className="staff-grid">
                             <div><span>Total cost</span><b>{peso(q.total_cost)}</b></div>
-                            <div><span>Profit</span><b className={q.profit < 0 ? 'neg' : ''}>{peso(q.profit)}</b></div>
-                            <div><span>Margin</span><b className={q.profit < 0 ? 'neg' : ''}>{q.margin === null ? '—' : `${q.margin.toFixed(1)}%`}</b></div>
-                        </div>
+                            <div><span>Profit</span><b className={q.profit < 0 ? 'neg' : ''}>{peso(q.profit)}</b></div>                        </div>
                     </div>
                     <div className="totals">
                         <div className="totals-row"><span>Sub total</span><b>{peso(q.subtotal)}</b></div>

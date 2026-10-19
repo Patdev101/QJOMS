@@ -8,7 +8,7 @@ class Tariff extends Model
 {
     public const TYPES = ['item' => 'Item', 'service' => 'Service'];
 
-    protected $fillable = ['type', 'code', 'description', 'uom', 'unit', 'cost', 'price', 'active'];
+    protected $fillable = ['type', 'category', 'subcategory', 'code', 'description', 'uom', 'unit', 'cost', 'price', 'active'];
 
     protected function casts(): array
     {

@@ -1,32 +1,27 @@
 import { Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import ConfirmDialog from '../../Components/ConfirmDialog';
+import DocFlow from '../../Components/DocFlow';
+import History from '../../Components/History';
 import Icon from '../../Components/Icon';
-import QuotationDetails, { Steps } from '../../Components/QuotationDetails';
+import QuotationDetails from '../../Components/QuotationDetails';
 import { peso } from '../../Components/format';
 import AppLayout from '../../Layouts/AppLayout';
 
-export default function Show({ quotation: q }) {
+// same layout as the job order and invoice pages: header → flow strip → next step → details → history
+export default function Show({ quotation: q, history }) {
     const jo = q.job_order;
-    const [asking, setAsking] = useState(false);
-    const [askDelete, setAskDelete] = useState(false);
+    const [asking, setAsking] = useState(null); // 'approve' | 'delete' | null
     const [busy, setBusy] = useState(false);
-
-    const steps = [
-        { label: 'Quotation made', sub: q.created, state: 'done' },
-        { label: 'Customer approval', sub: jo ? `Approved ${q.approved}` : 'Waiting', state: jo ? 'done' : 'current' },
-        { label: 'Job order', sub: jo ? `${jo.jo_no} · ${jo.status_label}` : 'After approval', state: jo ? (jo.status === 'billed' ? 'done' : 'current') : '' },
-        { label: 'Billing', sub: jo?.status === 'billed' ? 'Billed' : (jo?.status === 'completed' ? 'Ready to bill' : ''), state: jo?.status === 'billed' ? 'done' : '' },
-    ];
 
     function approve() {
         setBusy(true);
-        router.post(`/quotations/${q.id}/approve`, {}, { onFinish: () => { setBusy(false); setAsking(false); } });
+        router.post(`/quotations/${q.id}/approve`, {}, { onFinish: () => { setBusy(false); setAsking(null); } });
     }
 
     function remove() {
         setBusy(true);
-        router.delete(`/quotations/${q.id}`, { onFinish: () => { setBusy(false); setAskDelete(false); } });
+        router.delete(`/quotations/${q.id}`, { onFinish: () => { setBusy(false); setAsking(null); } });
     }
 
     return (
@@ -41,52 +36,61 @@ export default function Show({ quotation: q }) {
                     <p className="sub">{[q.customer, q.project, peso(q.grand_total)].filter(Boolean).join(' · ')}</p>
                 </div>
                 <div className="actions">
-                    {/* the printable page is plain HTML, so it opens in a new tab */}
-                    <a href={`/quotations/${q.id}/print`} target="_blank" rel="noreferrer" className="btn"><Icon name="printer" /> Print</a>
-                    {q.editable ? (
-                        <>
-                            <Link href={`/quotations/${q.id}/edit`} className="btn"><Icon name="pencil" /> Revise</Link>
-                            <button type="button" className="btn btn-primary" onClick={() => setAsking(true)}><Icon name="check" /> Approve → Job order</button>
-                        </>
-                    ) : jo && (
-                        <Link href={`/job-orders/${jo.id}`} className="btn btn-primary">Open {jo.jo_no} <Icon name="arrow-right" /></Link>
-                    )}
+                    <a href={`/quotations/${q.id}/print`} target="_blank" rel="noreferrer" className="btn"><Icon name="printer" /> Print quotation</a>
                 </div>
             </div>
 
             <div className="stack">
-                <Steps steps={steps} />
+                <DocFlow q={q} here="quotation" />
 
-                {q.editable && (
-                    <div className="callout">
-                        <Icon name="clock" size={20} />
-                        <div>
-                            <b>Waiting for the customer's go signal.</b> Print this quotation for the customer. If they want changes,
-                            click <b>Revise</b>. Once they agree, click <b>Approve</b> to turn it into a job order.
+                {/* the one thing to do next */}
+                <section className="card">
+                    <div className="card-head"><h2><Icon name="file-text" /> Quotation status</h2></div>
+                    {q.editable ? (
+                        <div className="next-step">
+                            <span className="next-ic"><Icon name="clock" size={22} /></span>
+                            <div className="next-text">
+                                <b>Next step:</b> print this quotation for the customer. If they want changes, revise it. Once they agree, approve it to create the job order.
+                            </div>
+                            <div className="next-actions">
+                                <Link href={`/quotations/${q.id}/edit`} className="btn btn-ghost btn-sm"><Icon name="pencil" size={15} /> Revise</Link>
+                                <button type="button" className="btn btn-primary" onClick={() => setAsking('approve')}><Icon name="check" /> Approve → Job order</button>
+                            </div>
                         </div>
-                    </div>
-                )}
+                    ) : (
+                        <div className="next-step closed">
+                            <span className="next-ic"><Icon name="check-circle" size={22} /></span>
+                            <div className="next-text"><b>Approved by the customer</b> on {q.approved}. The work continues on job order {jo?.jo_no}.</div>
+                            {jo && (
+                                <div className="next-actions">
+                                    <Link href={`/job-orders/${jo.id}`} className="btn btn-primary"><Icon name="arrow-right" /> Open {jo.jo_no}</Link>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </section>
 
                 <QuotationDetails q={q} />
+                <History items={history} />
 
                 {q.editable && (
                     <div className="danger-zone">
-                        <button type="button" className="btn btn-ghost btn-danger" onClick={() => setAskDelete(true)}><Icon name="trash" size={16} /> Delete quotation</button>
+                        <button type="button" className="btn btn-ghost btn-danger" onClick={() => setAsking('delete')}><Icon name="trash" size={16} /> Delete quotation</button>
                     </div>
                 )}
             </div>
 
-            <ConfirmDialog open={askDelete} tone="danger" busy={busy}
-                           title={`Delete ${q.quotation_no}?`}
-                           message="This quotation and its lines will be removed for good."
-                           confirmLabel="Delete quotation"
-                           onConfirm={remove} onCancel={() => setAskDelete(false)} />
-
-            <ConfirmDialog open={asking} tone="success" busy={busy}
+            <ConfirmDialog open={asking === 'approve'} tone="success" busy={busy}
                            title={`Customer approved ${q.quotation_no}?`}
                            message="It becomes a job order and can no longer be revised."
                            confirmLabel="Approve & create job order"
-                           onConfirm={approve} onCancel={() => setAsking(false)} />
+                           onConfirm={approve} onCancel={() => setAsking(null)} />
+
+            <ConfirmDialog open={asking === 'delete'} tone="danger" busy={busy}
+                           title={`Delete ${q.quotation_no}?`}
+                           message="This quotation and its lines will be removed for good."
+                           confirmLabel="Delete quotation"
+                           onConfirm={remove} onCancel={() => setAsking(null)} />
         </AppLayout>
     );
 }

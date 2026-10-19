@@ -4,7 +4,7 @@ import AppLayout from '../../Layouts/AppLayout';
 
 // add a customer, or edit one when `customer` is given
 export default function Form({ customer }) {
-    const form = useForm(customer ?? { name: '', address: '', contact_person: '', contact_no: '', discount_percent: '0' });
+    const form = useForm(customer ?? { name: '', address: '', contact_person: '', contact_no: '', email: '', discount_percent: '0' });
     const { data, setData, errors, processing } = form;
     const messages = [...new Set(Object.values(errors))];
     const field = (name) => ({ id: name, value: data[name], className: errors[name] ? 'is-invalid' : '', onChange: (e) => setData(name, e.target.value) });
@@ -55,6 +55,10 @@ export default function Form({ customer }) {
                         <div className="field">
                             <label htmlFor="contact_no">Contact no.</label>
                             <input {...field('contact_no')} placeholder="0917 123 4567" />
+                        </div>
+                        <div className="field span-2">
+                            <label htmlFor="email">Email</label>
+                            <input {...field('email')} type="email" placeholder="name@company.com" />
                         </div>
                     </div>
                 </div>

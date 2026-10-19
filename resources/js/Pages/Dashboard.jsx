@@ -42,7 +42,7 @@ export default function Dashboard({ greeting, month, stats, waiting, jobs }) {
             <div className="stats">
                 <Stat icon="clock" tone="amber" label="Waiting for approval" value={stats.pending_count} foot={`${peso(stats.pending_value)} quoted`} href="/quotations?status=pending" />
                 <Stat icon="clipboard" tone="pine" label="Job orders in progress" value={stats.active_jobs} foot="Open and ongoing work" href="/job-orders?status=active" />
-                <Stat icon="receipt" tone="clay" label="Ready for billing" value={stats.to_bill_count} foot={`${peso(stats.to_bill_value)} to bill`} href="/job-orders?status=completed" />
+                <Stat icon="receipt" tone="amber" label="Ready for billing" value={stats.to_bill_count} foot={`${peso(stats.to_bill_value)} to bill`} href="/job-orders?status=completed" />
                 <Stat icon="trending" tone="ink" label={`Approved in ${month}`} value={peso(stats.month_value).replace(/\.\d\d$/, '')}
                       foot={`${stats.month_count} ${stats.month_count === 1 ? 'quotation' : 'quotations'} approved`} />
             </div>
