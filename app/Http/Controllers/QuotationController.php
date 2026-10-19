@@ -9,6 +9,7 @@ use App\Models\Tariff;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 class QuotationController extends Controller
 {
@@ -22,16 +23,31 @@ class QuotationController extends Controller
                 ->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%{$s}%"))))
             ->latest('id')
             ->paginate(20)
-            ->withQueryString();
+            ->withQueryString()
+            ->through(fn ($q) => [
+                'id' => $q->id,
+                'quotation_no' => $q->quotation_no,
+                'customer' => $q->customer->name,
+                'project' => $q->project,
+                'date' => $q->date->format('M j, Y'),
+                'age' => $q->created_at->diffForHumans(),
+                'grand_total' => (float) $q->grand_total,
+                'status' => $q->status,
+                'jo_no' => $q->jobOrder?->jo_no,
+            ]);
 
         $counts = Quotation::selectRaw('status, count(*) as n')->groupBy('status')->pluck('n', 'status');
 
-        return view('quotations.index', compact('quotations', 'counts'));
+        return Inertia::render('Quotations/Index', [
+            'quotations' => $quotations,
+            'counts' => ['all' => $counts->sum(), 'pending' => $counts['pending'] ?? 0, 'approved' => $counts['approved'] ?? 0],
+            'filters' => ['status' => $request->status ?? '', 'q' => $request->q ?? ''],
+        ]);
     }
 
     public function create()
     {
-        return $this->form(new Quotation(['date' => now(), 'quotation_no' => Quotation::nextNumber()]));
+        return $this->form(new Quotation(['quotation_no' => Quotation::nextNumber(), 'date' => now()]));
     }
 
     public function store(Request $request)
@@ -42,14 +58,12 @@ class QuotationController extends Controller
             return $this->save($request, $quotation);
         });
 
-        return redirect()->route('dashboard')->with('success', "Quotation {$quotation->quotation_no} saved.");
+        return redirect()->route('quotations.show', $quotation)->with('success', "Quotation {$quotation->quotation_no} saved.");
     }
 
     public function show(Quotation $quotation)
     {
-        $quotation->load('customer', 'lines', 'jobOrder');
-
-        return view('quotations.show', compact('quotation'));
+        return Inertia::render('Quotations/Show', ['quotation' => $quotation->details()]);
     }
 
     public function print(Quotation $quotation)
@@ -111,13 +125,35 @@ class QuotationController extends Controller
         return redirect()->route('quotations.index')->with('success', 'Quotation deleted.');
     }
 
+    /** the React form, empty for a new quotation or filled in for a revision */
     private function form(Quotation $quotation)
     {
-        return view('quotations.form', [
-            'quotation' => $quotation,
-            'customers' => Customer::orderBy('name')->get(),
+        return Inertia::render('Quotations/Create', [
+            'number' => $quotation->quotation_no,
+            'today' => now()->format('Y-m-d'),
+            'types' => Tariff::TYPES,
+            'quotation' => $quotation->exists ? [
+                'id' => $quotation->id,
+                'customer_id' => (string) $quotation->customer_id,
+                'date' => $quotation->date->format('Y-m-d'),
+                'address' => (string) $quotation->address,
+                'contact_person' => (string) $quotation->contact_person,
+                'contact_no' => (string) $quotation->contact_no,
+                'project' => (string) $quotation->project,
+                'discount_percent' => (string) (float) $quotation->discount_percent,
+                'lines' => $quotation->lines->map(fn ($l) => [
+                    'type' => $l->type,
+                    'tariff_id' => $l->tariff_id,
+                    'qty' => (string) (float) $l->qty,
+                    'unit_price' => number_format($l->unit_price, 2, '.', ''),
+                ]),
+            ] : null,
+            'customers' => Customer::orderBy('name')->get(['id', 'name', 'address', 'contact_person', 'contact_no', 'discount_percent'])
+                ->map(fn ($c) => [...$c->toArray(), 'discount_percent' => (float) $c->discount_percent]),
+            // inactive tariffs still count when an older quotation already uses them
             'tariffs' => Tariff::where('active', true)->orWhereIn('id', $quotation->lines->pluck('tariff_id')->filter())
-                ->orderBy('code')->get(['id', 'type', 'code', 'description', 'uom', 'unit', 'cost', 'price']),
+                ->orderBy('code')->get(['id', 'type', 'code', 'description', 'uom', 'unit', 'cost', 'price'])
+                ->map(fn ($t) => [...$t->toArray(), 'cost' => (float) $t->cost, 'price' => (float) $t->price]),
         ]);
     }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Tariff;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 class TariffController extends Controller
 {
@@ -16,16 +17,36 @@ class TariffController extends Controller
             ->when($request->q, fn ($q, $s) => $q->where(fn ($w) => $w->where('code', 'like', "%{$s}%")->orWhere('description', 'like', "%{$s}%")))
             ->orderBy('code')
             ->paginate(20)
-            ->withQueryString();
+            ->withQueryString()
+            ->through(fn ($t) => [
+                'id' => $t->id,
+                'code' => $t->code,
+                'description' => $t->description,
+                'uom' => $t->uom,
+                'unit' => $t->unit,
+                'cost' => (float) $t->cost,
+                'price' => (float) $t->price,
+                'margin' => $t->margin(),
+                'active' => $t->active,
+            ]);
 
         $counts = Tariff::selectRaw('type, count(*) as n')->groupBy('type')->pluck('n', 'type');
 
-        return view('tariffs.index', compact('tariffs', 'type', 'counts'));
+        return Inertia::render('Tariffs/Index', [
+            'tariffs' => $tariffs,
+            'type' => $type,
+            'types' => Tariff::TYPES,
+            'counts' => ['service' => $counts['service'] ?? 0, 'item' => $counts['item'] ?? 0],
+            'filters' => ['q' => $request->q ?? ''],
+        ]);
     }
 
     public function create(Request $request)
     {
-        return view('tariffs.form', ['tariff' => new Tariff(['type' => $request->type ?? 'service', 'active' => true])]);
+        return Inertia::render('Tariffs/Form', [
+            'tariff' => null,
+            'type' => array_key_exists($request->type, Tariff::TYPES) ? $request->type : 'service',
+        ]);
     }
 
     public function store(Request $request)
@@ -37,7 +58,20 @@ class TariffController extends Controller
 
     public function edit(Tariff $tariff)
     {
-        return view('tariffs.form', compact('tariff'));
+        return Inertia::render('Tariffs/Form', [
+            'tariff' => [
+                'id' => $tariff->id,
+                'type' => $tariff->type,
+                'code' => $tariff->code,
+                'description' => $tariff->description,
+                'uom' => $tariff->uom,
+                'unit' => (string) $tariff->unit,
+                'cost' => number_format($tariff->cost, 2, '.', ''),
+                'price' => number_format($tariff->price, 2, '.', ''),
+                'active' => $tariff->active,
+            ],
+            'type' => $tariff->type,
+        ]);
     }
 
     public function update(Request $request, Tariff $tariff)

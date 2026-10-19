@@ -58,6 +58,47 @@ class Quotation extends Model
         return $this->grand_total > 0 ? $this->profit() / $this->grand_total * 100 : null;
     }
 
+    /** everything the quotation and job order pages show */
+    public function details(): array
+    {
+        $this->loadMissing('customer', 'lines', 'jobOrder');
+        $jo = $this->jobOrder;
+
+        return [
+            'id' => $this->id,
+            'quotation_no' => $this->quotation_no,
+            'status' => $this->status,
+            'customer' => $this->customer->name,
+            'contact_person' => $this->contact_person,
+            'contact_no' => $this->contact_no,
+            'address' => $this->address,
+            'project' => $this->project,
+            'date' => $this->date->format('F j, Y'),
+            'created' => $this->created_at->format('M j, Y'),
+            'approved' => $this->approved_at?->format('M j, Y'),
+            'subtotal' => (float) $this->subtotal,
+            'discount_percent' => (float) $this->discount_percent,
+            'discount_amount' => (float) $this->discount_amount,
+            'grand_total' => (float) $this->grand_total,
+            'total_cost' => (float) $this->total_cost,
+            'profit' => $this->profit(),
+            'margin' => $this->margin(),
+            'editable' => $this->isEditable(),
+            'job_order' => $jo ? ['id' => $jo->id, 'jo_no' => $jo->jo_no, 'status' => $jo->status, 'status_label' => JobOrder::STATUSES[$jo->status]] : null,
+            'lines' => $this->lines->map(fn ($l) => [
+                'id' => $l->id,
+                'type' => $l->type,
+                'type_label' => Tariff::TYPES[$l->type],
+                'code' => $l->code,
+                'description' => $l->description,
+                'uom' => $l->uom,
+                'qty' => (float) $l->qty,
+                'unit_price' => (float) $l->unit_price,
+                'total' => (float) $l->total,
+            ])->all(),
+        ];
+    }
+
     /** QT-2026-0001, counting again from 1 every year */
     public static function nextNumber(): string
     {

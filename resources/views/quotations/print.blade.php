@@ -86,7 +86,7 @@
 
     <div class="sign">
         <div>Prepared by</div>
-        <div>Customer conforme</div>
+        <div>Customer approval</div>
     </div>
 </body>
 </html>

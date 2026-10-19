@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\JobOrder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Inertia\Inertia;
 
 class JobOrderController extends Controller
 {
@@ -28,23 +29,41 @@ class JobOrderController extends Controller
                     ->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%{$s}%")))))
             ->latest('id')
             ->paginate(20)
-            ->withQueryString();
+            ->withQueryString()
+            ->through(fn ($jo) => [
+                'id' => $jo->id,
+                'jo_no' => $jo->jo_no,
+                'quotation_no' => $jo->quotation->quotation_no,
+                'customer' => $jo->quotation->customer->name,
+                'project' => $jo->quotation->project,
+                'date' => $jo->date->format('M j, Y'),
+                'grand_total' => (float) $jo->quotation->grand_total,
+                'status' => $jo->status,
+                'status_label' => JobOrder::STATUSES[$jo->status],
+            ]);
 
         $byStatus = JobOrder::selectRaw('status, count(*) as n')->groupBy('status')->pluck('n', 'status');
-        $counts = collect(self::FILTERS)->map(fn ($statuses) => $byStatus->only($statuses)->sum());
 
-        return view('job-orders.index', [
+        return Inertia::render('JobOrders/Index', [
             'jobOrders' => $jobOrders,
-            'counts' => $counts,
-            'total' => $byStatus->sum(),
+            'counts' => ['all' => $byStatus->sum()] + collect(self::FILTERS)->map(fn ($statuses) => $byStatus->only($statuses)->sum())->all(),
+            'filters' => ['status' => $request->status ?? '', 'q' => $request->q ?? ''],
         ]);
     }
 
     public function show(JobOrder $jobOrder)
     {
-        $jobOrder->load('quotation.customer', 'quotation.lines');
-
-        return view('job-orders.show', compact('jobOrder'));
+        return Inertia::render('JobOrders/Show', [
+            'jobOrder' => [
+                'id' => $jobOrder->id,
+                'jo_no' => $jobOrder->jo_no,
+                'date' => $jobOrder->date->format('M j, Y'),
+                'status' => $jobOrder->status,
+                'status_label' => JobOrder::STATUSES[$jobOrder->status],
+            ],
+            'statuses' => JobOrder::STATUSES,
+            'quotation' => $jobOrder->quotation->details(),
+        ]);
     }
 
     public function updateStatus(Request $request, JobOrder $jobOrder)

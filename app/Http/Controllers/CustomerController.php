@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class CustomerController extends Controller
 {
@@ -13,14 +14,28 @@ class CustomerController extends Controller
             ->when($request->q, fn ($q, $s) => $q->where(fn ($w) => $w->where('name', 'like', "%{$s}%")->orWhere('contact_person', 'like', "%{$s}%")))
             ->orderBy('name')
             ->paginate(20)
-            ->withQueryString();
+            ->withQueryString()
+            ->through(fn ($c) => [
+                'id' => $c->id,
+                'name' => $c->name,
+                'initials' => $c->initials(),
+                'color' => $c->avatarColor(),
+                'address' => $c->address,
+                'contact_person' => $c->contact_person,
+                'contact_no' => $c->contact_no,
+                'discount_percent' => (float) $c->discount_percent,
+                'quotations_count' => $c->quotations_count,
+            ]);
 
-        return view('customers.index', compact('customers'));
+        return Inertia::render('Customers/Index', [
+            'customers' => $customers,
+            'filters' => ['q' => $request->q ?? ''],
+        ]);
     }
 
     public function create()
     {
-        return view('customers.form', ['customer' => new Customer]);
+        return Inertia::render('Customers/Form', ['customer' => null]);
     }
 
     public function store(Request $request)
@@ -32,7 +47,16 @@ class CustomerController extends Controller
 
     public function edit(Customer $customer)
     {
-        return view('customers.form', compact('customer'));
+        return Inertia::render('Customers/Form', [
+            'customer' => [
+                'id' => $customer->id,
+                'name' => $customer->name,
+                'address' => (string) $customer->address,
+                'contact_person' => (string) $customer->contact_person,
+                'contact_no' => (string) $customer->contact_no,
+                'discount_percent' => (string) (float) $customer->discount_percent,
+            ],
+        ]);
     }
 
     public function update(Request $request, Customer $customer)

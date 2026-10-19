@@ -55,6 +55,7 @@ h1, h2, h3 { line-height: 1.25; }
 a { color: var(--primary); }
 .ic { flex-shrink: 0; }
 [hidden] { display: none !important; }
+#app { display: contents; } /* the React root takes part in the page grid */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .muted { color: var(--muted); }
 .text-right { text-align: right; }
@@ -225,6 +226,8 @@ input[readonly] { background: var(--panel-2); color: var(--ink-2); }
 .segmented .n { font-size: 12px; font-weight: 600; color: var(--muted); }
 
 .form-page { max-width: 880px; }
+/* pages with a form card (customer, tariff) sit in the middle, title included */
+.container:has(.form-page) { max-width: 880px; }
 .form-section { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 24px; padding: 24px; border-bottom: 1px solid var(--line); }
 .form-section h3 { margin: 0 0 4px; font-size: 15px; }
 .form-section p { margin: 0; font-size: 13px; color: var(--muted); }

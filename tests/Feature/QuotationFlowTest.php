@@ -13,53 +13,130 @@ class QuotationFlowTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** for now only the dashboard and "new quotation" are open */
-    public function test_new_quotation_is_computed_and_saved_back_to_the_dashboard(): void
-    {
-        $customer = Customer::create(['name' => 'ABC', 'discount_percent' => 10]);
-        $service = Tariff::create(['type' => 'service', 'code' => 'S1', 'description' => 'Welding', 'uom' => 'hr', 'cost' => 300, 'price' => 500]);
-        $item = Tariff::create(['type' => 'item', 'code' => 'I1', 'description' => 'Plate', 'uom' => 'pc', 'cost' => 1000, 'price' => 1500]);
+    private Customer $customer;
 
+    private Tariff $service;
+
+    private Tariff $item;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->customer = Customer::create(['name' => 'ABC', 'discount_percent' => 10]);
+        $this->service = Tariff::create(['type' => 'service', 'code' => 'S1', 'description' => 'Welding', 'uom' => 'hr', 'cost' => 300, 'price' => 500]);
+        $this->item = Tariff::create(['type' => 'item', 'code' => 'I1', 'description' => 'Plate', 'uom' => 'pc', 'cost' => 1000, 'price' => 1500]);
+    }
+
+    /** the whole demo flow: make → revise → approve → job order → billed */
+    public function test_quotation_goes_from_new_to_billed_job_order(): void
+    {
         $this->get('/')->assertOk();
         $this->get('/quotations/create')->assertOk();
 
         $this->post('/quotations', [
-            'date' => '2026-10-14',
-            'customer_id' => $customer->id,
+            'date' => '2026-10-16',
+            'customer_id' => $this->customer->id,
             'project' => 'Barge repair',
             'discount_percent' => 10,
             'lines' => [
-                ['type' => 'service', 'tariff_id' => $service->id, 'qty' => 4, 'unit_price' => 500],
-                ['type' => 'item', 'tariff_id' => $item->id, 'qty' => 2, 'unit_price' => 1500],
+                ['type' => 'service', 'tariff_id' => $this->service->id, 'qty' => 4, 'unit_price' => 500],
+                ['type' => 'item', 'tariff_id' => $this->item->id, 'qty' => 2, 'unit_price' => 1500],
             ],
-        ])->assertRedirect('/');
+        ]);
 
-        $quotation = Quotation::first();
+        $quotation = Quotation::firstOrFail();
         $this->assertSame('QT-'.now()->year.'-0001', $quotation->quotation_no);
         $this->assertEquals(5000, $quotation->subtotal);   // 2000 + 3000
         $this->assertEquals(500, $quotation->discount_amount);
         $this->assertEquals(4500, $quotation->grand_total);
         $this->assertEquals(3200, $quotation->total_cost); // 1200 + 2000
 
-        // the dashboard lists it, but not as a link
-        $this->get('/')->assertSee($quotation->quotation_no)->assertDontSee("/quotations/{$quotation->id}");
+        $this->get('/quotations?status=pending&q=Barge')->assertOk()->assertSee($quotation->quotation_no);
+        $this->get("/quotations/{$quotation->id}")->assertOk()->assertSee('Barge repair');
+        $this->get("/quotations/{$quotation->id}/print")->assertOk()->assertSee('Customer approval')->assertDontSee('Profit');
+
+        // revise the same quotation: one line, discount changed to 5%
+        $this->get("/quotations/{$quotation->id}/edit")->assertOk();
+        $this->put("/quotations/{$quotation->id}", [
+            'date' => '2026-10-16',
+            'customer_id' => $this->customer->id,
+            'discount_percent' => 5,
+            'lines' => [['type' => 'service', 'tariff_id' => $this->service->id, 'qty' => 2, 'unit_price' => 550]],
+        ])->assertRedirect("/quotations/{$quotation->id}");
+
+        $quotation->refresh();
+        $this->assertSame(1, Quotation::count());
+        $this->assertCount(1, $quotation->lines);
+        $this->assertEquals(1045, $quotation->grand_total); // 1100 - 55
+
+        // customer agrees: approve → job order, and the quotation is locked
+        $this->post("/quotations/{$quotation->id}/approve");
+        $jobOrder = JobOrder::firstOrFail();
+        $this->assertSame('approved', $quotation->fresh()->status);
+        $this->assertSame('JO-'.now()->year.'-0001', $jobOrder->jo_no);
+        $this->get("/quotations/{$quotation->id}/edit")->assertRedirect("/quotations/{$quotation->id}");
+        $this->post("/quotations/{$quotation->id}/approve");
+        $this->assertSame(1, JobOrder::count());
+
+        $this->get('/job-orders?status=active')->assertOk()->assertSee($jobOrder->jo_no);
+        $this->get("/job-orders/{$jobOrder->id}")->assertOk()->assertSee($jobOrder->jo_no);
+
+        $this->patch("/job-orders/{$jobOrder->id}/status", ['status' => 'completed'])->assertRedirect();
+        $this->patch("/job-orders/{$jobOrder->id}/status", ['status' => 'billed'])->assertRedirect();
+        $this->assertSame('billed', $jobOrder->fresh()->status);
+        $this->get('/job-orders?status=billed')->assertOk()->assertSee($jobOrder->jo_no);
     }
 
-    public function test_switched_off_pages_answer_not_found(): void
+    public function test_saving_opens_the_new_quotation(): void
     {
-        $customer = Customer::create(['name' => 'ABC', 'discount_percent' => 0]);
-        $quotation = Quotation::create([
-            'quotation_no' => 'QT-2026-0001', 'date' => '2026-10-14', 'customer_id' => $customer->id, 'status' => 'pending',
-        ]);
+        $this->post('/quotations', [
+            'date' => '2026-10-16', 'customer_id' => $this->customer->id, 'discount_percent' => 0,
+            'lines' => [['type' => 'service', 'tariff_id' => $this->service->id, 'qty' => 1, 'unit_price' => 500]],
+        ])->assertRedirect('/quotations/'.Quotation::firstOrFail()->id);
+    }
 
-        foreach (['/quotations', "/quotations/{$quotation->id}", "/quotations/{$quotation->id}/edit", "/quotations/{$quotation->id}/print",
-            '/job-orders', '/customers', '/customers/create', '/tariffs', '/tariffs/create'] as $page) {
-            $this->get($page)->assertNotFound();
+    public function test_customers_and_tariffs_can_be_managed(): void
+    {
+        foreach (['/customers', '/customers/create', "/customers/{$this->customer->id}/edit",
+            '/tariffs?type=item', '/tariffs/create', "/tariffs/{$this->item->id}/edit"] as $page) {
+            $this->get($page)->assertOk();
         }
 
-        // approving does nothing
-        $this->post("/quotations/{$quotation->id}/approve")->assertNotFound();
-        $this->assertSame('pending', $quotation->fresh()->status);
-        $this->assertSame(0, JobOrder::count());
+        $this->post('/customers', ['name' => 'New Co', 'discount_percent' => 7.5])->assertRedirect('/customers');
+        $newCo = Customer::where('name', 'New Co')->firstOrFail();
+        $this->assertEquals(7.5, $newCo->discount_percent);
+        $this->put("/customers/{$newCo->id}", ['name' => 'New Co Inc', 'discount_percent' => 0])->assertRedirect('/customers');
+        $this->assertSame('New Co Inc', $newCo->fresh()->name);
+        $this->delete("/customers/{$newCo->id}")->assertRedirect();
+        $this->assertNull($newCo->fresh());
+
+        $this->post('/tariffs', ['type' => 'service', 'code' => 'S2', 'description' => 'Painting', 'uom' => 'sqm', 'cost' => 100, 'price' => 180, 'active' => true])
+            ->assertRedirect('/tariffs?type=service');
+        $this->post('/tariffs', ['type' => 'service', 'code' => 'S2', 'description' => 'Again', 'uom' => 'sqm', 'cost' => 1, 'price' => 2])
+            ->assertSessionHasErrors('code'); // codes are unique
+        $painting = Tariff::where('code', 'S2')->firstOrFail();
+        $this->put("/tariffs/{$painting->id}", ['type' => 'service', 'code' => 'S2', 'description' => 'Painting', 'uom' => 'sqm', 'cost' => 100, 'price' => 200])
+            ->assertRedirect();
+        $this->assertFalse($painting->fresh()->active); // unchecked box = inactive
+        $this->delete("/tariffs/{$painting->id}")->assertRedirect();
+        $this->assertNull($painting->fresh());
+    }
+
+    public function test_quotation_delete_rules(): void
+    {
+        $pending = Quotation::create(['quotation_no' => 'QT-2026-0001', 'date' => '2026-10-19', 'customer_id' => $this->customer->id, 'status' => 'pending']);
+
+        // a customer with quotations can't be deleted
+        $this->delete("/customers/{$this->customer->id}")->assertRedirect();
+        $this->assertNotNull($this->customer->fresh());
+
+        $this->delete("/quotations/{$pending->id}")->assertRedirect('/quotations');
+        $this->assertNull($pending->fresh());
+
+        // an approved quotation can't be deleted
+        $approved = Quotation::create(['quotation_no' => 'QT-2026-0002', 'date' => '2026-10-19', 'customer_id' => $this->customer->id, 'status' => 'approved']);
+        $this->delete("/quotations/{$approved->id}")->assertRedirect();
+        $this->assertNotNull($approved->fresh());
     }
 }

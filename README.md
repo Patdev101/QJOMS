@@ -1,58 +1,109 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# QJOMS — Quotation and Job Order Management System
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## Tech Stack
 
-## About Laravel
+| Layer | Technology |
+|---|---|
+| Backend | PHP 8.5, Laravel 13 |
+| Frontend | React 19, Inertia.js 3 (no separate API; Laravel controllers send data straight to React pages) |
+| Build tool | Vite 8 |
+| Database | Microsoft SQL Server Express (`sqlsrv` driver) |
+| Styling | Hand-written CSS, "Pine & Sand" theme (`public/css/style.css`), Plus Jakarta Sans font |
+| Testing | PHPUnit 12 |
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+QJOMS is an ERP module for **sales and order management**. It covers the quote-to-cash process: staff prepare a quotation from standard service and item prices, the customer approves it, it becomes a job order, and the job order is tracked through to billing.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```
+Quotation  →  Customer approval  →  Job Order  →  Billing
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+## Features
 
-## Contributing
+### Available now
+- **Dashboard**: quotations waiting for customer approval, job orders in progress, work ready for billing, and the value approved this month.
+- **New quotation**:
+  - Pick a customer; their address, contact details and **discount %** fill in automatically.
+  - Add service and item lines with a searchable code picker. Description, UOM and price come from the tariff.
+  - Totals, discount and grand total update as you type. A staff-only box shows cost, profit and margin, and is never printed.
+  - Keyboard friendly: Enter moves to the next field and adds a new line at the end.
+  - Saving opens the new quotation.
+- **Quotations list**: filter by All / For approval / Approved, search by number, customer or project, click a row to open it.
+- **Quotation details**: progress steps, customer info, lines, totals and the staff-only box.
+- **Print**: a clean printable quotation (or job order) without cost or profit, with "Prepared by" and "Customer approval" signature lines.
+- **Revise**: edit a quotation that's still waiting for approval (same quotation, no new number).
+- **Approve → Job order**: once the customer agrees, approve it (with a confirm pop-up). It becomes job order `JO-YYYY-0001` and the quotation is locked.
+- **Job orders**: list with filters (In progress / Ready for billing / Billed) and search; detail page with clickable status steps Open → Ongoing → Completed → Billed (Billed asks first).
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+- **Delete quotation**: only while it's still waiting for approval (asks first).
+- **Customer profiles** (Master data): add, edit, search and delete customers, each with a default discount %. A customer with quotations can't be deleted.
+- **Service and item tariffs** (Master data): code, description, UOM, unit, cost and price, with a margin column and a live profit/margin preview. Tariffs can be set inactive to hide them from new quotations.
 
-## Code of Conduct
+### Not built yet
+- Login and user roles
+- Billing / invoices
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Business rules
+- Each customer has a default **discount in %**. It fills in on new quotations, and staff can change it on a quotation before approval.
+- Each tariff has a **cost** (internal) and a **selling price**. Cost and profit are shown to staff only.
+- Prices are copied onto each quotation line, so changing a tariff later doesn't change old quotations.
+- The server recalculates all totals when saving; the numbers on screen are only a preview.
+- Quotation numbers are `QT-YYYY-0001` and job order numbers `JO-YYYY-0001`; both restart every year.
+- Only quotations waiting for approval can be revised or deleted; approved ones are locked.
+- Deleting a tariff is safe: quotations keep their own copy of each line.
 
-## Security Vulnerabilities
+## Getting started
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Requirements
+- PHP 8.3+ with the `pdo_sqlsrv` extension
+- Composer
+- Node.js 20+ and npm
+- SQL Server (Express is fine)
 
-## License
+### Setup
+```bash
+composer install
+npm install
+copy .env.example .env        # then set the database values below
+php artisan key:generate
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Database settings in `.env`:
+```env
+DB_CONNECTION=sqlsrv
+DB_HOST=.\SQLEXPRESS
+DB_DATABASE=quotation_system
+DB_TRUST_SERVER_CERTIFICATE=true
+```
+
+Create the database in SQL Server, then:
+```bash
+php artisan migrate --seed                  # tables + sample customers and tariffs
+php artisan db:seed --class=DemoSeeder      # optional: sample quotations and job orders
+```
+
+### Run
+```bash
+npm run build                    # build the React pages (or: npm run dev while editing)
+php artisan serve --port=8092
+```
+Open http://localhost:8092
+
+### Tests
+```bash
+php artisan test
+```
+
+## Project structure
+
+| Path | What it holds |
+|---|---|
+| `resources/js/Pages/` | React pages: `Dashboard.jsx`, `Quotations/` (Index, Show, Create — also used for Revise), `JobOrders/` (Index, Show), `Customers/` (Index, Form), `Tariffs/` (Index, Form) |
+| `resources/js/Layouts/AppLayout.jsx` | Top menu with the Master data drop-down, phone menu, messages |
+| `resources/js/Components/` | Icons, money formatting, confirm pop-up, pager, shared quotation details |
+| `resources/views/` | `app.blade.php` (React shell) and `quotations/print.blade.php` (printable quotation / job order) |
+| `app/Http/Controllers/` | Dashboard, quotations, job orders, customers, tariffs |
+| `app/Models/` | Customer, Tariff, Quotation, QuotationLine, JobOrder |
+| `database/migrations/` | All tables |
+| `public/css/style.css` | The whole look; colors are set at the top in `:root` |
