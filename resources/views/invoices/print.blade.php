@@ -73,6 +73,12 @@
         <div><dt>Address</dt><dd>{{ $quotation->address }}</dd></div>
         <div><dt>Contact no.</dt><dd>{{ $quotation->contact_no }}</dd></div>
         <div><dt>Project</dt><dd>{{ $quotation->project }}</dd></div>
+        @if ($quotation->vessel_name)
+            <div><dt>Vessel</dt><dd>{{ $quotation->vessel_name }}</dd></div>
+        @endif
+        @foreach ($quotation->vesselDetails() as $label => $value)
+            <div><dt>{{ $label }}</dt><dd>{{ $value }}</dd></div>
+        @endforeach
     </dl>
 
     <table>
@@ -83,9 +89,9 @@
             @foreach ($quotation->lines as $line)
                 <tr>
                     <td>{{ $loop->iteration }}</td>
-                    <td>{{ $line->description }} <span style="color:#6f665a">({{ $line->code }})</span></td>
-                    <td>{{ $line->uom }}</td>
-                    <td class="num">{{ (float) $line->qty }}</td>
+                    <td>{{ $line->description }} <span style="color:#6f665a">({{ $line->code }})</span>@if ($line->note)<div style="color:#6f665a;font-size:12px;font-style:italic">{{ $line->note }}</div>@endif</td>
+                    <td>{{ $line->unitLabel() }}</td>
+                    <td class="num">{{ $line->qtyLabel() }}</td>
                     <td class="num">{{ number_format($line->unit_price, 2) }}</td>
                     <td class="num">{{ number_format($line->total, 2) }}</td>
                 </tr>

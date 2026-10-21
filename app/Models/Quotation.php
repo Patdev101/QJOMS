@@ -11,13 +11,29 @@ class Quotation extends Model
 {
     protected $fillable = [
         'quotation_no', 'date', 'customer_id', 'address', 'contact_person', 'contact_no', 'project',
+        'vessel_name', 'loa', 'lbp', 'breadth', 'depth', 'date_arrival', 'date_drydocked', 'date_undocked', 'date_sail_out',
         'subtotal', 'discount_percent', 'discount_amount', 'grand_total', 'total_cost', 'status', 'approved_at',
+    ];
+
+    /** vessel particulars and dates: [field, label, suffix] — shown and printed only when filled in */
+    public const VESSEL_FIELDS = [
+        ['loa', 'L.O.A.', ' m'], ['lbp', 'L.B.P.', ' m'], ['breadth', 'Breadth mld.', ' m'], ['depth', 'Depth mld.', ' m'],
+        ['date_arrival', 'Date arrival', ''], ['date_drydocked', 'Date drydocked', ''],
+        ['date_undocked', 'Date undocked', ''], ['date_sail_out', 'Date sail-out / tow-out', ''],
     ];
 
     protected function casts(): array
     {
         return [
             'date' => 'date',
+            'date_arrival' => 'date',
+            'date_drydocked' => 'date',
+            'date_undocked' => 'date',
+            'date_sail_out' => 'date',
+            'loa' => 'decimal:2',
+            'lbp' => 'decimal:2',
+            'breadth' => 'decimal:2',
+            'depth' => 'decimal:2',
             'approved_at' => 'datetime',
             'subtotal' => 'decimal:2',
             'discount_percent' => 'decimal:2',
@@ -40,6 +56,21 @@ class Quotation extends Model
     public function jobOrder(): HasOne
     {
         return $this->hasOne(JobOrder::class);
+    }
+
+    /** filled-in vessel particulars and dates as [label => "66.16 m" | "July 1, 2026"] */
+    public function vesselDetails(): array
+    {
+        $out = [];
+        foreach (self::VESSEL_FIELDS as [$field, $label, $suffix]) {
+            $value = $this->{$field};
+            if ($value === null || $value === '') {
+                continue;
+            }
+            $out[$label] = $value instanceof \DateTimeInterface ? $value->format('F j, Y') : rtrim(rtrim((string) $value, '0'), '.').$suffix;
+        }
+
+        return $out;
     }
 
     public function isEditable(): bool
@@ -74,6 +105,8 @@ class Quotation extends Model
             'contact_no' => $this->contact_no,
             'address' => $this->address,
             'project' => $this->project,
+            'vessel_name' => $this->vessel_name,
+            'vessel' => $this->vesselDetails(),
             'date' => $this->date->format('F j, Y'),
             'created' => $this->created_at->format('M j, Y'),
             'approved' => $this->approved_at?->format('M j, Y'),
@@ -98,10 +131,13 @@ class Quotation extends Model
                 'id' => $l->id,
                 'type' => $l->type,
                 'type_label' => Tariff::TYPES[$l->type],
+                'section' => $l->section,
                 'code' => $l->code,
                 'description' => $l->description,
-                'uom' => $l->uom,
+                'note' => $l->note,
+                'uom' => $l->unitLabel(),
                 'qty' => (float) $l->qty,
+                'qty_label' => $l->qtyLabel(),
                 'unit_price' => (float) $l->unit_price,
                 'total' => (float) $l->total,
             ])->all(),

@@ -143,6 +143,44 @@ class QuotationFlowTest extends TestCase
         $this->get("/quotations/{$quotation->id}")->assertSee('payment_removed')->assertSee('INV-'.now()->year.'-0001');
     }
 
+    /** a line typed by hand instead of picked from the tariff */
+    public function test_manual_line_is_saved_revised_and_printed(): void
+    {
+        $base = ['date' => '2026-10-22', 'customer_id' => $this->customer->id, 'discount_percent' => 0];
+
+        // no tariff and no description: refused with a clear message
+        $this->post('/quotations', $base + ['lines' => [['type' => 'service', 'tariff_id' => '', 'description' => '  ', 'qty' => 1, 'unit_price' => 100]]])
+            ->assertSessionHasErrors('lines.0.description');
+        $this->assertSame(0, Quotation::count());
+
+        $this->post('/quotations', $base + ['lines' => [
+            ['type' => 'service', 'tariff_id' => $this->service->id, 'qty' => 2, 'unit_price' => 500],
+            ['type' => 'item', 'tariff_id' => '', 'description' => 'Coast Guard security assistance', 'uom' => 'time', 'qty' => 4, 'unit_price' => 2000, 'note' => 'Towing in and out'],
+        ]])->assertSessionHasNoErrors();
+
+        $quotation = Quotation::with('lines')->firstOrFail();
+        $manual = $quotation->lines[1];
+        $this->assertNull($manual->tariff_id);
+        $this->assertSame('item', $manual->type);
+        $this->assertSame('Coast Guard security assistance', $manual->description);
+        $this->assertSame('time', $manual->uom);
+        $this->assertSame('', $manual->code);
+        $this->assertEquals(8000, $manual->total);
+        $this->assertEquals(9000, $quotation->subtotal);     // 1,000 + 8,000
+        $this->assertEquals(600, $quotation->total_cost);    // only the tariff line has a cost (2 × 300)
+
+        // the revise form gets the typed text back, and saving keeps it
+        $this->get("/quotations/{$quotation->id}/edit")->assertOk()
+            ->assertInertia(fn ($page) => $page->where('quotation.lines.1.description', 'Coast Guard security assistance')->where('quotation.lines.1.uom', 'time'));
+        $this->put("/quotations/{$quotation->id}", $base + ['lines' => [
+            ['type' => 'item', 'tariff_id' => '', 'description' => 'Coast Guard security assistance (2 guards)', 'uom' => 'time', 'qty' => 4, 'unit_price' => 2500],
+        ]])->assertSessionHasNoErrors();
+        $this->assertEquals(10000, $quotation->fresh()->grand_total);
+
+        $this->get("/quotations/{$quotation->id}")->assertOk();
+        $this->get("/quotations/{$quotation->id}/print")->assertOk()->assertSee('Coast Guard security assistance (2 guards)');
+    }
+
     public function test_saving_opens_the_new_quotation(): void
     {
         $this->post('/quotations', [

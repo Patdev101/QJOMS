@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
@@ -19,6 +20,8 @@ Route::middleware('guest')->group(function () {
 // everything else needs a signed-in user
 Route::middleware('auth')->group(function () {
     Route::post('logout', [AuthController::class, 'destroy'])->name('logout');
+    Route::get('account/password', [AccountController::class, 'editPassword'])->name('account.password');
+    Route::put('account/password', [AccountController::class, 'updatePassword'])->middleware('throttle:5,1');
 
     Route::get('/', DashboardController::class)->name('dashboard');
 

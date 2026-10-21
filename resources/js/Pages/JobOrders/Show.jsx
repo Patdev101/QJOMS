@@ -1,6 +1,7 @@
 import { Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import ConfirmDialog from '../../Components/ConfirmDialog';
+import DateInput from '../../Components/DateInput';
 import DocFlow from '../../Components/DocFlow';
 import History from '../../Components/History';
 import Icon from '../../Components/Icon';
@@ -100,8 +101,8 @@ export default function Show({ jobOrder: jo, statuses, quotation: q, invoice, hi
                         </div>
                         <div className="next-actions">
                             {previous && (
-                                <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setAsking('back')}>
-                                    <Icon name="chevron-left" size={15} /> Back to {statuses[previous]}
+                                <button type="button" className="btn" disabled={busy} onClick={() => setAsking('back')}>
+                                    <Icon name="chevron-left" size={16} /> Back to {statuses[previous]}
                                 </button>
                             )}
                             {closed && invoice && (
@@ -133,12 +134,13 @@ export default function Show({ jobOrder: jo, statuses, quotation: q, invoice, hi
                         <div className="grid-2">
                             <div className="field">
                                 <label htmlFor="inv_date">Invoice date</label>
-                                <input id="inv_date" type="date" value={invoiceForm.data.date} onChange={(e) => invoiceForm.setData('date', e.target.value)} />
+                                <DateInput id="inv_date" value={invoiceForm.data.date} clearable={false} invalid={Boolean(invoiceForm.errors.date)}
+                                           onChange={(v) => invoiceForm.setData('date', v)} />
                             </div>
                             <div className="field">
                                 <label htmlFor="inv_due">Due date</label>
-                                <input id="inv_due" type="date" value={invoiceForm.data.due_date} className={invoiceForm.errors.due_date ? 'is-invalid' : ''}
-                                       onChange={(e) => invoiceForm.setData('due_date', e.target.value)} />
+                                <DateInput id="inv_due" value={invoiceForm.data.due_date} clearable={false} min={invoiceForm.data.date}
+                                           invalid={Boolean(invoiceForm.errors.due_date)} onChange={(v) => invoiceForm.setData('due_date', v)} />
                             </div>
                         </div>
                         <div className="field field-gap">

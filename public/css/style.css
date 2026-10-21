@@ -180,6 +180,14 @@ a { color: var(--primary); }
 .btn-ghost:hover { background: rgba(60, 45, 20, .06); border-color: transparent; }
 .btn-ghost.btn-danger:hover { background: var(--clay-soft); color: var(--clay); }
 .btn-sm { height: 34px; padding: 0 12px; font-size: 13px; border-radius: 9px; }
+/* buttons, one rule everywhere: main action solid green · other actions outlined white · delete outlined red ·
+   text-only (ghost) only for Cancel · row icons keep a light border so they read as buttons */
+.btn-danger { background: var(--panel); border-color: #eab5a6; }
+.row-actions .btn-icon.btn-ghost { border-color: var(--line); background: var(--panel); }
+.row-actions .btn-icon.btn-ghost:hover { border-color: var(--line-2); background: var(--panel-2); }
+.row-actions .btn-icon.btn-ghost.btn-danger:hover { border-color: #eab5a6; background: var(--clay-soft); }
+.btn-on-dark { background: transparent; border-color: rgba(255, 255, 255, .35); color: #fff; }
+.btn-on-dark:hover { background: rgba(255, 255, 255, .1); border-color: rgba(255, 255, 255, .6); }
 .btn-icon { width: 36px; height: 36px; padding: 0; }
 
 /* ---------- forms ---------- */
@@ -205,6 +213,45 @@ input[list]:not([type=checkbox]):not([type=radio]) {
 input[list]::-webkit-calendar-picker-indicator { opacity: 0; cursor: pointer; } /* still clickable to open the list */
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
 input[readonly] { background: var(--panel-2); color: var(--ink-2); }
+
+/* date box + calendar (Components/DateInput.jsx) — replaces the browser's own date picker */
+.date-input { position: relative; }
+.date-field { width: 100%; height: 42px; display: flex; align-items: center; gap: 9px; padding: 0 34px 0 12px !important; margin: 0; border: 1px solid var(--line-2); border-radius: var(--radius-sm); background: #fff; color: var(--ink); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.date-field:hover { border-color: #c8bba2; }
+.date-field:focus-visible, .date-input.open .date-field { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
+.date-field.date-blank .date-text { color: #b3a896; }
+.date-field .date-ic { flex: none; color: var(--primary); }
+.date-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.date-clear { position: absolute; top: 50%; right: 8px; width: 24px; height: 24px; display: grid; place-items: center; margin-top: -12px; border: 0; border-radius: 7px; background: none; color: var(--muted); cursor: pointer; }
+.date-clear:hover { background: var(--panel-2); color: var(--clay); }
+.date-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 90; width: 292px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow-lg); animation: pop .14s ease-out; }
+.date-pop.up { top: auto; bottom: calc(100% + 6px); }
+.date-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; }
+.date-nav { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--ink-2); cursor: pointer; }
+.date-nav:hover { background: var(--panel-2); border-color: var(--line-2); }
+.date-title { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border: 0; border-radius: 9px; background: none; color: var(--ink); font: inherit; font-weight: 800; cursor: pointer; }
+.date-title:hover { background: var(--panel-2); }
+.date-title .flip { transform: rotate(180deg); }
+.date-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; outline: none; }
+.date-grid:focus-visible .date-day.cursor { box-shadow: 0 0 0 2px var(--amber); }
+.date-dow { padding: 4px 0 6px; text-align: center; font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--muted); }
+.date-day { height: 34px; border: 0; border-radius: 9px; background: none; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.date-day:hover { background: var(--primary-soft); color: var(--primary-ink); }
+.date-day.other { color: #c2b8a6; font-weight: 500; }
+.date-day.today { box-shadow: inset 0 0 0 1.5px var(--amber); }
+.date-day.cursor { background: var(--panel-2); }
+.date-day.selected, .date-day.selected:hover { background: var(--primary); color: #fff; }
+.date-day.blocked { color: #d6cdbd; cursor: not-allowed; background: none; text-decoration: line-through; }
+.date-months { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px 0; }
+.date-month { height: 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+.date-month:hover { background: var(--primary-soft); border-color: transparent; }
+.date-month.cursor { border-color: var(--amber); }
+.date-month.selected { background: var(--primary); border-color: var(--primary); color: #fff; }
+.date-foot { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.date-link { padding: 5px 9px; border: 0; border-radius: 8px; background: none; color: var(--primary); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.date-link:hover { background: var(--primary-soft); }
+.date-link.muted { color: var(--muted); }
+.date-link:disabled { opacity: .4; cursor: not-allowed; }
 .is-invalid { border-color: var(--clay) !important; box-shadow: 0 0 0 3px rgba(184, 73, 47, .12) !important; }
 .mono { font-family: var(--mono); }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 18px; }
@@ -425,16 +472,35 @@ a.list-row:hover { background: var(--hover); }
 .account-who small { display: block; font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
 .account-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px; border: 0; border-radius: 10px; background: none; color: var(--ink); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
 .account-item:hover { background: var(--clay-soft); color: var(--clay-ink); }
+a.account-item { text-decoration: none; }
+/* main category row (tariff tree, quotation lines): dark band that opens to its categories / lines */
+.main-row { cursor: pointer; user-select: none; }
+.main-row td { padding: 13px 22px !important; background: var(--panel-2); color: var(--ink); font-weight: 800; font-size: 13.5px; letter-spacing: .01em;
+    border-bottom: 1px solid var(--line); box-shadow: inset 4px 0 0 var(--primary); }
+.main-row:hover td { background: var(--primary-soft); }
+.main-row[aria-expanded="true"] td { background: var(--primary-soft); color: var(--primary-ink); }
+.main-row .tree-count { color: var(--muted); font-weight: 600; }
+.main-row .tree-chev { color: var(--primary); }
+.main-row .main-total { color: var(--primary-ink); }
+.main-row .main-total { float: right; font-variant-numeric: tabular-nums; }
+/* back to the top of a long page; sits above the quotation's bottom bar */
+.to-top { position: fixed; right: 24px; bottom: 110px; z-index: 40; display: inline-flex; align-items: center; gap: 4px; height: 40px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--panel); color: var(--primary); font: inherit; font-size: 13px; font-weight: 700; box-shadow: var(--shadow-lg); cursor: pointer; }
+.to-top:hover { background: var(--primary-soft); }
+.to-top .flip { transform: rotate(180deg); }
+@media print { .to-top { display: none; } }
+a.account-item:hover { background: var(--hover); color: var(--ink); }
 .signout { height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: rgba(255, 255, 255, .08); color: var(--side-ink); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; } /* phone menu */
 @media (max-width: 1180px) { .account-btn .who-name { display: none; } }
 
 /* job order: the "next step" bar under the progress line */
+/* the Next step bar: never pressed against the card's header line */
+.card-head + .next-step { margin-top: 18px; }
 .next-step { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 0 22px 22px; padding: 14px 16px; border: 1px solid #f2d7a6; border-radius: 12px; background: var(--amber-soft); color: #5c3d0a; }
 .next-step.closed { border-color: #c5ddcf; background: var(--primary-soft); color: var(--primary-ink); }
 .next-ic { display: grid; place-items: center; color: var(--amber-ink); }
 .next-step.closed .next-ic { color: var(--primary); }
 .next-text { flex: 1 1 260px; }
-.next-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.next-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-left: auto; }
 
 /* tariff list: category and sub-category heading rows */
 .toolbar-right { display: flex; gap: 10px; flex: 1 1 340px; justify-content: flex-end; flex-wrap: wrap; }
@@ -517,9 +583,29 @@ a.list-row:hover { background: var(--hover); }
 .lines tbody tr:hover { background: transparent; }
 .lines input:not([type=checkbox]), .lines select { height: 38px; }
 .lines .line-no { width: 50px; padding-top: 19px; color: var(--muted); font-size: 13px; font-weight: 700; }
-.col-type { width: 122px; }
+.col-type { width: 130px; }
 .col-cat { width: 220px; }
-.col-code { width: 150px; }
+.col-code { width: 130px; }
+/* the quotation form uses more of a wide screen; the lines table keeps its column widths and scrolls sideways
+   on smaller screens instead of squeezing ("Servi…") */
+.container:has(.quote-form) { max-width: 1520px; }
+.quote-form .lines { min-width: 1360px; }
+.lines .line-note { margin-top: 6px; height: 32px !important; font-size: 12.5px; }
+/* a line typed by hand instead of picked from the tariff */
+.manual-tag { display: inline-flex; align-items: center; height: 26px; margin-top: 6px; padding: 0 10px; border-radius: 999px; background: var(--amber-soft); color: var(--amber-ink); font-size: 12px; font-weight: 700; }
+.table:not(.lines) .manual-tag { margin-top: 0; }
+.lines .uom-input { width: 100%; }
+/* hour blocks typed in hours: "[ 16 ] hrs", and under the price what it buys: "per 8 hrs per day" */
+.lines td > .qty2 input.qty { width: 72px; }
+.lines .price-per { margin-top: 4px; text-align: right; white-space: nowrap; }
+/* manual line: second unit, added with "+ 2nd unit" */
+.col-qty2 { width: 190px; }
+.lines .qty2 .uom2-input { width: 70px; padding: 0 8px; }
+.unit2-x { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border: 0; border-radius: 7px; background: none; color: var(--muted); cursor: pointer; }
+.unit2-x:hover { background: var(--clay-soft); color: var(--clay); }
+.add-unit2 { display: inline-flex; align-items: center; gap: 4px; height: 32px; margin-top: 3px; padding: 0 10px; border: 1px dashed var(--line-2); border-radius: 9px; background: none; color: var(--primary); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.add-unit2:hover { background: var(--primary-soft); border-style: solid; }
+.line-note-text { font-style: italic; }
 .lines .svc-cell { min-width: 260px; }
 .lines .svc-cell .unit { margin-top: 4px; }
 .lines select:disabled { background-color: var(--panel-2); color: var(--muted); cursor: not-allowed; }
@@ -527,8 +613,16 @@ a.list-row:hover { background: var(--hover); }
 .lines input.code-input[list]:not([type=checkbox]) { padding: 0 10px; background-image: none; } /* typed, so no arrow: the whole box shows the code */
 .lines input.code-input::-webkit-calendar-picker-indicator { display: none !important; }
 .lines .code-input::placeholder { text-transform: none; font-family: var(--font); }
-.col-uom { width: 72px; }
-.col-qty { width: 96px; }
+.col-uom { width: 90px; }
+.col-qty { width: 112px; }
+/* second quantity of a two-part unit ("Pax / Day"): [ 30 ] Day */
+.col-qty2 { width: 140px; }
+.lines .qty2 { display: flex; align-items: center; gap: 6px; }
+.lines .qty2 input { width: 76px; }
+.lines .qty2 .uom { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+/* vessel particulars & dates: four across */
+.vessel-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 860px) { .vessel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .col-price { width: 136px; }
 .col-total { width: 128px; }
 .col-x { width: 52px; }

@@ -1,6 +1,7 @@
 import { Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import ConfirmDialog from '../../Components/ConfirmDialog';
+import DateInput from '../../Components/DateInput';
 import DocFlow from '../../Components/DocFlow';
 import History from '../../Components/History';
 import Icon from '../../Components/Icon';
@@ -129,7 +130,8 @@ export default function Show({ invoice: inv, quotation: q, methods, today, histo
                             </div>
                             <div className="field">
                                 <label htmlFor="pay_date">Date received</label>
-                                <input id="pay_date" type="date" value={payForm.data.date} onChange={(e) => payForm.setData('date', e.target.value)} />
+                                <DateInput id="pay_date" value={payForm.data.date} clearable={false} invalid={Boolean(payForm.errors.date)}
+                                           onChange={(v) => payForm.setData('date', v)} />
                             </div>
                             <div className="field">
                                 <label htmlFor="pay_method">Method</label>

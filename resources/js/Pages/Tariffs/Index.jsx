@@ -16,7 +16,7 @@ const range = (values, fmt) => {
 
 // UOM, cost, price and margin of a whole category or sub-category, lined up under the column headings
 function SummaryCells({ items, addHref }) {
-    const uoms = [...new Set(items.map((t) => t.uom))];
+    const uoms = [...new Set(items.map((t) => t.uom).filter(Boolean))]; // blank units (as in the sheet) are left out
     const costed = items.filter((t) => t.cost > 0);
     const margins = costed.map((t) => t.margin).filter((m) => m !== null);
 
@@ -34,14 +34,14 @@ function SummaryCells({ items, addHref }) {
             </td>
             <td>
                 <div className="row-actions">
-                    <Link href={addHref} className="btn btn-ghost btn-sm group-add" title="Add a new one in this group"><Icon name="plus" size={14} /> Add</Link>
+                    <Link href={addHref} className="btn btn-sm group-add" title="Add a new one in this group"><Icon name="plus" size={14} /> Add</Link>
                 </div>
             </td>
         </>
     );
 }
 
-export default function Index({ tariffs, type, types, counts, categories, filters }) {
+export default function Index({ tariffs, type, types, counts, sections = [], filters }) {
     const [search, setSearch] = useState(filters.q);
     const [deleting, setDeleting] = useState(null);
     const [busy, setBusy] = useState(false);
@@ -51,21 +51,26 @@ export default function Index({ tariffs, type, types, counts, categories, filter
     // "＋" on a category / sub-category row: the add form opens with these filled in
     const addUrl = (category, subcategory) => `/tariffs/create?${new URLSearchParams({ type, ...(category ? { category } : {}), ...(subcategory ? { subcategory } : {}) })}`;
 
-    // folder tree: category › sub-category › services (the rows already come sorted that way)
-    const tree = [];
+    // folder tree: main category (sheet section) › category › sub-category › services (rows already come sorted that way)
+    const groups = [];
     tariffs.data.forEach((t) => {
-        let cat = tree.find((c) => c.name === t.category);
-        if (! cat) tree.push(cat = { key: `c:${t.category}`, name: t.category, count: 0, subs: [] });
+        let sec = groups.find((s) => s.name === (t.section ?? null));
+        if (! sec) groups.push(sec = { key: `m:${t.section}`, name: t.section ?? null, count: 0, cats: [] });
+        let cat = sec.cats.find((c) => c.name === t.category);
+        if (! cat) sec.cats.push(cat = { key: `c:${t.section}|${t.category}`, name: t.category, count: 0, subs: [] });
         let sub = cat.subs.find((s) => s.name === t.subcategory);
-        if (! sub) cat.subs.push(sub = { key: `s:${t.category}|${t.subcategory}`, name: t.subcategory, items: [] });
+        if (! sub) cat.subs.push(sub = { key: `s:${t.section}|${t.category}|${t.subcategory}`, name: t.subcategory, items: [] });
         sub.items.push(t);
         cat.count++;
+        sec.count++;
     });
+    const tree = groups.flatMap((s) => s.cats);
 
-    // closed by default; searching or picking a category opens everything so the matches show
+    // closed by default; searching opens everything so the matches show; picking a main category opens its categories
     const [open, setOpen] = useState(() => new Set());
     const [expandAll, setExpandAll] = useState(false);
     const expanded = expandAll || Boolean(filters.q || filters.category);
+    const sectionOpen = (s) => expanded || Boolean(filters.section) || open.has(s.key);
     const toggle = (key) => setOpen((prev) => {
         const next = new Set(prev);
         next.has(key) ? next.delete(key) : next.add(key);
@@ -78,7 +83,7 @@ export default function Index({ tariffs, type, types, counts, categories, filter
         : (t.subcategory && t.description.includes(' — ') ? t.description.split(' — ').pop() : t.description));
 
     const visit = (changes) => {
-        const params = { type, q: search, category: filters.category, ...changes };
+        const params = { type, q: search, section: filters.section, ...changes };
         router.get('/tariffs', Object.fromEntries(Object.entries(params).filter(([, v]) => v)), { preserveState: true, replace: true });
     };
 
@@ -93,11 +98,11 @@ export default function Index({ tariffs, type, types, counts, categories, filter
     }
 
     return (
-        <AppLayout title={`${label} tariff`} active={`tariff-${type}`}>
+        <AppLayout title="Tariff" active={`tariff-${type}`}>
             <div className="page-head">
                 <div>
-                    <h1>{label} tariff</h1>
-                    <p className="sub">Standard {plural} with cost and selling price. The price fills in automatically on quotations.</p>
+                    <h1>Tariff</h1>
+                    <p className="sub">Standard services and items with cost and selling price. Pick Services or Items below. The price fills in automatically on quotations.</p>
                 </div>
                 <Link href={`/tariffs/create?type=${type}`} className="btn btn-primary"><Icon name="plus" /> Add {label.toLowerCase()}</Link>
             </div>
@@ -114,14 +119,14 @@ export default function Index({ tariffs, type, types, counts, categories, filter
                     </div>
                     <div className="toolbar-right">
                         {tree.length > 0 && ! (filters.q || filters.category) && (
-                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setExpandAll(! expandAll); setOpen(new Set()); }}>
+                            <button type="button" className="btn btn-sm" onClick={() => { setExpandAll(! expandAll); setOpen(new Set()); }}>
                                 <Icon name={expandAll ? 'chevron-right' : 'chevron-down'} size={15} /> {expandAll ? 'Collapse all' : 'Expand all'}
                             </button>
                         )}
-                        {categories.length > 0 && (
-                            <select className="category-filter" value={filters.category} aria-label="Category" onChange={(e) => visit({ category: e.target.value })}>
-                                <option value="">All categories</option>
-                                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+                        {sections.length > 0 && (
+                            <select className="category-filter" value={filters.section} aria-label="Main category" onChange={(e) => visit({ section: e.target.value })}>
+                                <option value="">All main categories</option>
+                                {sections.map((s) => <option key={s} value={s}>{s}</option>)}
                             </select>
                         )}
                         <label className="search">
@@ -165,7 +170,17 @@ export default function Index({ tariffs, type, types, counts, categories, filter
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {tree.map((cat) => {
+                                    {groups.map((sec) => (
+                                    <Fragment key={sec.key}>
+                                    {/* main category: opens to its categories */}
+                                    <tr className="main-row" onClick={() => toggle(sec.key)} aria-expanded={sectionOpen(sec)}>
+                                        <td colSpan={7}>
+                                            <span className={`tree-chev${sectionOpen(sec) ? ' open' : ''}`}><Icon name="chevron-right" size={16} /></span>
+                                            {sec.name || 'Other (no main category)'}
+                                            <span className="tree-count">{sec.cats.length} {sec.cats.length === 1 ? 'category' : 'categories'} · {sec.count} {sec.count === 1 ? label.toLowerCase() : plural}</span>
+                                        </td>
+                                    </tr>
+                                    {sectionOpen(sec) && sec.cats.map((cat) => {
                                         const catOpen = expanded || open.has(cat.key);
                                         return (
                                         <Fragment key={cat.key}>
@@ -174,7 +189,7 @@ export default function Index({ tariffs, type, types, counts, categories, filter
                                                 <span className={`tree-chev${catOpen ? ' open' : ''}`}><Icon name="chevron-right" size={16} /></span>
                                                 <Icon name="folder" size={15} /> {cat.name || 'No category'}
                                                 <span className="tree-count">
-                                                    {cat.subs.filter((s) => s.name).length > 0 && `${cat.subs.filter((s) => s.name).length} sub-categories · `}
+                                                    {cat.subs.filter((s) => s.name).length > 0 && `${cat.subs.filter((s) => s.name).length} ${cat.subs.filter((s) => s.name).length === 1 ? 'sub-category' : 'sub-categories'} · `}
                                                     {cat.count} {cat.count === 1 ? label.toLowerCase() : plural}
                                                 </span>
                                             </td>
@@ -227,6 +242,8 @@ export default function Index({ tariffs, type, types, counts, categories, filter
                                         </Fragment>
                                         );
                                     })}
+                                    </Fragment>
+                                    ))}
                                 </tbody>
                             </table>
                         </div>

@@ -53,7 +53,7 @@ export default function Show({ quotation: q, history }) {
                                 <b>Next step:</b> print this quotation for the customer. If they want changes, revise it. Once they agree, approve it to create the job order.
                             </div>
                             <div className="next-actions">
-                                <Link href={`/quotations/${q.id}/edit`} className="btn btn-ghost btn-sm"><Icon name="pencil" size={15} /> Revise</Link>
+                                <Link href={`/quotations/${q.id}/edit`} className="btn" title="Change the lines, prices or details"><Icon name="pencil" size={16} /> Revise</Link>
                                 <button type="button" className="btn btn-primary" onClick={() => setAsking('approve')}><Icon name="check" /> Approve → Job order</button>
                             </div>
                         </div>
@@ -75,7 +75,7 @@ export default function Show({ quotation: q, history }) {
 
                 {q.editable && (
                     <div className="danger-zone">
-                        <button type="button" className="btn btn-ghost btn-danger" onClick={() => setAsking('delete')}><Icon name="trash" size={16} /> Delete quotation</button>
+                        <button type="button" className="btn btn-danger" onClick={() => setAsking('delete')}><Icon name="trash" size={16} /> Delete quotation</button>
                     </div>
                 )}
             </div>

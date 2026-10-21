@@ -1,12 +1,51 @@
 import { Link, router, useForm } from '@inertiajs/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import DateInput from '../../Components/DateInput';
 import Icon from '../../Components/Icon';
 import { peso, plain } from '../../Components/format';
 import AppLayout from '../../Layouts/AppLayout';
 
 const NONE = '__none__'; // tariffs without a category
+// "Manual entry" in the Category list: a line typed by hand (description, UOM, price) instead of picked from the tariff
+const MANUAL = '__manual__';
+const isManual = (line) => line.category === MANUAL;
 let nextKey = 1;
-const newLine = (type = 'service', category = '') => ({ key: nextKey++, type, category, tariff_id: '', code: '', qty: '1', unit_price: '' });
+const newLine = (type = 'service', category = '') => ({
+    key: nextKey++, type, category, tariff_id: '', code: '', description: '', uom: '', uom2: '', show2: false, qty: '1', qty2: '', unit_price: '', note: '',
+});
+const VESSEL = { vessel_name: '', loa: '', lbp: '', breadth: '', depth: '', date_arrival: '', date_drydocked: '', date_undocked: '', date_sail_out: '' };
+
+// a unit in two parts ("Pax / Day") multiplies both quantities; an empty second quantity counts as 1
+// "8 Hrs", "24 Hrs", "8Hrs" are blocks of hours: that box takes hours, so 16 hours of "8 Hrs" is 2 blocks
+// (a plain "Hr" is already counted in hours)
+const hoursPer = (unit) => {
+    const m = /^(\d+(?:\.\d+)?)\s*hrs?$/i.exec(String(unit ?? '').trim());
+    return m && Number(m[1]) > 0 ? Number(m[1]) : null;
+};
+const unitsIn = (unit, n) => (hoursPer(unit) ? n / hoursPer(unit) : n);
+// "per 8 hrs per day", "per unit per 8 hrs": what one unit price buys
+const perText = (uom, uom2) => [uom, uom2].filter(Boolean)
+    .map((u) => (hoursPer(u) ? `${hoursPer(u)} hrs` : String(u).toLowerCase())).join(' per ');
+// the units of a line: from its tariff, or typed on a manual line
+const partsOf = (t, line) => (t ? { uom: t.uom, uom2: t.uom2 } : (isManual(line) ? { uom: line.uom, uom2: line.uom2 || null } : { uom: null, uom2: null }));
+// how many priced units a line is: qty (× 2nd qty for a unit in two parts), with hours turned into blocks;
+// an empty 2nd qty is one unit (one block of hours for "Unit / 8Hrs")
+const unitsOf = (t, line) => {
+    const { uom, uom2 } = partsOf(t, line);
+    const first = unitsIn(uom, Number(line.qty) || 0);
+    if (! uom2) return first;
+    return first * unitsIn(uom2, Number(line.qty2) || hoursPer(uom2) || 1);
+};
+// typing "Pax / Day" in a manual line's UOM box gives it a second unit
+const splitUnit = (text) => {
+    const [a, ...rest] = String(text).split('/');
+    return rest.length && text.trim().toUpperCase() !== 'N/A' ? { uom: a.trim(), uom2: rest.join('/').trim() } : null;
+};
+const unitLabel = (t) => (t?.uom ? (t.uom2 ? `${t.uom} / ${t.uom2}` : t.uom) : '—');
+// drydocking and wharfage are charged per linear meter of the vessel: the L.O.A. is the quantity
+// (not lay days: "per day" lines are counted in days)
+const usesLoa = (t) => t && /^lm$/i.test(t.uom) && ! t.uom2 && /drydock|wharfage/i.test(`${t.category} ${t.description}`)
+    && ! /per day/i.test(t.description);
 
 // under its sub-category, "Gritblasting SA 2.5 — Hull Area" only needs to say "Hull Area"
 const shortName = (t) => (t.subcategory && t.description.includes(' — ')
@@ -21,23 +60,25 @@ export default function Create({ number, today, customers, tariffs, types, quota
 
     const form = useForm(quotation
         ? {
-            ...quotation, id: undefined,
+            ...VESSEL, ...quotation, id: undefined,
             lines: quotation.lines.map((l) => {
                 const t = byId(l.tariff_id);
-                return { key: nextKey++, ...l, category: t ? catOf(t) : '', code: t?.code ?? '' };
+                // a line without a tariff (typed by hand, or its tariff was deleted) opens as a manual line
+                return { key: nextKey++, qty2: '', note: '', description: '', uom: '', uom2: '', ...l, show2: Boolean(l.uom2), category: t ? catOf(t) : MANUAL, code: t?.code ?? '' };
             }),
         }
         : {
-            customer_id: '', date: today, address: '', contact_person: '', contact_no: '', project: '',
+            customer_id: '', date: today, address: '', contact_person: '', contact_no: '', project: '', ...VESSEL,
             discount_percent: '0', lines: [newLine()],
         });
     const backTo = quotation ? `/quotations/${quotation.id}` : '/';
     const { data, setData, errors, processing } = form;
 
-    // only the chosen type (service or item): its categories in name order ("no category" last),
-    // and each category's entries grouped by sub-category
+    // only the chosen type (service or item): its categories in the tariff sheet's order (by first code,
+    // "no category" last), and each category's entries grouped by sub-category
+    const firstCode = (type, category) => tariffs.filter((t) => t.type === type && catOf(t) === category).map((t) => t.code).sort()[0] ?? '';
     const categoriesFor = (type) => [...new Set(tariffs.filter((t) => t.type === type).map(catOf))]
-        .sort((a, b) => (a === NONE) - (b === NONE) || a.localeCompare(b));
+        .sort((a, b) => (a === NONE) - (b === NONE) || firstCode(type, a).localeCompare(firstCode(type, b)));
     const groupsIn = (type, category) => {
         const groups = [];
         tariffs.filter((t) => t.type === type && catOf(t) === category)
@@ -84,12 +125,20 @@ export default function Create({ number, today, customers, tariffs, types, quota
     const updateLines = (fn) => setData((prev) => ({ ...prev, lines: fn(prev.lines) }));
     const setLine = (key, changes) => updateLines((lines) => lines.map((l) => (l.key === key ? { ...l, ...changes } : l)));
 
-    // a new line starts in the last category used for that type: quicker when entering one section of the tariff
-    function addLine(type) {
-        const line = newLine(type, data.lines.filter((l) => l.type === type).at(-1)?.category ?? '');
+    // a new line starts in the last category used for that type: quicker when entering one section of the tariff;
+    // a manual line starts with the cursor in its description
+    function addLine(type, manual = false) {
+        const last = data.lines.filter((l) => l.type === type && ! isManual(l)).at(-1)?.category ?? '';
+        const line = newLine(type, manual ? MANUAL : last);
         updateLines((lines) => [...lines, line]);
         setFocus([line.key, line.category ? 'service' : 'category']);
         setEmptyAlert(false);
+    }
+
+    function chooseCategory(line, category) {
+        setLine(line.key, { category, tariff_id: '', code: '', unit_price: '', qty2: '', ...(category === MANUAL ? { description: '', uom: '', uom2: '', show2: false } : {}) });
+        setMissing((m) => ({ ...m, [line.key]: false }));
+        setFocus([line.key, 'service']);
     }
 
     function removeLine(key) {
@@ -100,9 +149,17 @@ export default function Create({ number, today, customers, tariffs, types, quota
         if (next) setFocus([next.key, 'service']);
     }
 
+    // a different service starts at one unit: 1, or the hours of one block ("8 Hrs" → 8),
+    // or the vessel's L.O.A. for drydocking / wharfage per LM
+    const startQty = (t) => (hoursPer(t.uom) ? String(hoursPer(t.uom)) : (usesLoa(t) && Number(data.loa) > 0 ? String(Number(data.loa)) : '1'));
+
     // picking a service fills in its code, unit and list price
     function choose(line, t) {
-        setLine(line.key, { tariff_id: t.id, type: t.type, category: catOf(t), code: t.code, unit_price: Number(t.price).toFixed(2) });
+        const fresh = Number(line.tariff_id) !== t.id;
+        setLine(line.key, {
+            tariff_id: t.id, type: t.type, category: catOf(t), code: t.code, unit_price: Number(t.price).toFixed(2),
+            ...(fresh ? { qty: startQty(t), qty2: '' } : {}),
+        });
         setMissing((m) => ({ ...m, [line.key]: false }));
         setFocus([line.key, 'qty']);
     }
@@ -111,7 +168,8 @@ export default function Create({ number, today, customers, tariffs, types, quota
     function typeCode(line, text) {
         const t = tariffs.find((x) => x.code.toLowerCase() === text.trim().toLowerCase());
         if (t) {
-            setLine(line.key, { code: t.code, tariff_id: t.id, type: t.type, category: catOf(t), unit_price: Number(t.price).toFixed(2) });
+            setLine(line.key, { code: t.code, tariff_id: t.id, type: t.type, category: catOf(t), unit_price: Number(t.price).toFixed(2),
+                ...(Number(line.tariff_id) !== t.id ? { qty: startQty(t), qty2: '' } : {}) });
             setMissing((m) => ({ ...m, [line.key]: false }));
         } else {
             setLine(line.key, { code: text, tariff_id: '', unit_price: '' });
@@ -134,9 +192,9 @@ export default function Create({ number, today, customers, tariffs, types, quota
 
         data.lines.forEach((line) => {
             const t = byId(line.tariff_id);
-            const qty = Number(line.qty) || 0;
+            const qty = unitsOf(t, line);
             subtotal += Math.round(qty * (Number(line.unit_price) || 0) * 100) / 100;
-            if (t) { cost += qty * Number(t.cost); filled++; }
+            if (t) { cost += qty * Number(t.cost); filled++; } else if (isManual(line) && line.description.trim()) filled++;
         });
 
         const percent = Math.min(Math.max(Number(data.discount_percent) || 0, 0), 100);
@@ -154,10 +212,18 @@ export default function Create({ number, today, customers, tariffs, types, quota
             return;
         }
 
-        const blank = data.lines.find((l) => ! l.tariff_id);
+        // every line needs a picked service, or (manual line) a typed description
+        const blank = data.lines.find((l) => (isManual(l) ? ! l.description.trim() : ! l.tariff_id));
         if (blank) {
             setMissing((m) => ({ ...m, [blank.key]: true }));
             setFocus([blank.key, blank.category ? 'service' : 'category']);
+            return;
+        }
+        // a manual line with a 2nd quantity also needs the name of that unit ("Day")
+        const unnamed = data.lines.find((l) => isManual(l) && String(l.qty2).trim() !== '' && ! String(l.uom2 ?? '').trim());
+        if (unnamed) {
+            setMissing((m) => ({ ...m, [`${unnamed.key}:uom2`]: true }));
+            setFocus([unnamed.key, 'uom2']);
             return;
         }
 
@@ -203,7 +269,7 @@ export default function Create({ number, today, customers, tariffs, types, quota
                 {tariffs.map((t) => <option key={t.id} value={t.code}>{t.description} — ₱{plain(t.price)}</option>)}
             </datalist>
 
-            <form onSubmit={submit} noValidate
+            <form className="quote-form" onSubmit={submit} noValidate
                   onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }}>
                 <div className="stack">
                     <section className="card">
@@ -224,7 +290,7 @@ export default function Create({ number, today, customers, tariffs, types, quota
                             </div>
                             <div className="field">
                                 <label htmlFor="date">Date</label>
-                                <input id="date" type="date" value={data.date} className={errors.date ? 'is-invalid' : ''} onChange={(e) => setData('date', e.target.value)} />
+                                <DateInput id="date" value={data.date} invalid={Boolean(errors.date)} clearable={false} onChange={(v) => setData('date', v)} />
                             </div>
                             <div className="field">
                                 <label htmlFor="address">Address</label>
@@ -247,8 +313,37 @@ export default function Create({ number, today, customers, tariffs, types, quota
 
                     <section className="card">
                         <div className="card-head">
+                            <h2><Icon name="clipboard" /> Vessel particulars &amp; dates</h2>
+                            <span className="muted" style={{ fontSize: 13 }}>Optional · printed only when filled in · L.O.A. fills in drydocking and wharfage per LM</span>
+                        </div>
+                        <div className="card-body grid-2">
+                            <div className="field span-2">
+                                <label htmlFor="vessel_name">Vessel</label>
+                                <input id="vessel_name" value={data.vessel_name} placeholder="e.g. M/Tkr. Leila Micaela" onChange={(e) => setData('vessel_name', e.target.value)} />
+                            </div>
+                            <div className="grid-2 span-2 vessel-grid">
+                                {[['loa', 'L.O.A. (m)'], ['lbp', 'L.B.P. (m)'], ['breadth', 'Breadth mld. (m)'], ['depth', 'Depth mld. (m)']].map(([name, label]) => (
+                                    <div key={name} className="field">
+                                        <label htmlFor={name}>{label}</label>
+                                        <input id={name} type="number" min="0" step="0.01" value={data[name]} className={errors[name] ? 'is-invalid' : ''}
+                                               onChange={(e) => setData(name, e.target.value)} />
+                                    </div>
+                                ))}
+                                {[['date_arrival', 'Date arrival'], ['date_drydocked', 'Date drydocked'], ['date_undocked', 'Date undocked'], ['date_sail_out', 'Date sail-out / tow-out']].map(([name, label]) => (
+                                    <div key={name} className="field">
+                                        <label htmlFor={name}>{label}</label>
+                                        <DateInput id={name} value={data[name]} invalid={Boolean(errors[name])} placeholder="Not set"
+                                                   onChange={(v) => setData(name, v)} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className="card">
+                        <div className="card-head">
                             <h2><Icon name="file-text" /> Services &amp; items</h2>
-                            <span className="muted" style={{ fontSize: 13 }}>Pick service or item, then category, or just type the code · Enter jumps to the next field</span>
+                            <span className="muted" style={{ fontSize: 13 }}>Pick service or item, then category, or just type the code · not in the tariff? choose <b>Manual entry</b> · Enter jumps to the next field</span>
                         </div>
                         <div className="table-scroll">
                             <table className="table lines">
@@ -261,6 +356,7 @@ export default function Create({ number, today, customers, tariffs, types, quota
                                         <th className="col-code">Code</th>
                                         <th className="col-uom">UOM</th>
                                         <th className="col-qty num">Qty</th>
+                                        <th className="col-qty2" title="For units in two parts, e.g. Pax / Day">× 2nd qty</th>
                                         <th className="col-price num">Unit price</th>
                                         <th className="col-total num">Total</th>
                                         <th className="col-x"><span className="sr-only">Remove</span></th>
@@ -268,19 +364,28 @@ export default function Create({ number, today, customers, tariffs, types, quota
                                 </thead>
                                 <tbody>
                                     {data.lines.map((line, i) => {
-                                        const t = byId(line.tariff_id);
-                                        const total = Math.round((Number(line.qty) || 0) * (Number(line.unit_price) || 0) * 100) / 100;
+                                        const manual = isManual(line);
+                                        const t = manual ? null : byId(line.tariff_id);
+                                        const total = Math.round(unitsOf(t, line) * (Number(line.unit_price) || 0) * 100) / 100;
+                                        const { uom: unit1, uom2: unit2 } = partsOf(t, line);
+                                        const hrs1 = hoursPer(unit1);
+                                        const hrs2 = hoursPer(unit2);
+                                        const has2 = Boolean(unit2) || (manual && line.show2);
                                         const priceChanged = t && line.unit_price !== '' && Number(line.unit_price) !== Number(t.price);
-                                        const unknownCode = line.code.trim() !== '' && ! t;
-                                        const needService = missing[line.key] || lineError(i, 'tariff_id');
+                                        const unknownCode = ! manual && line.code.trim() !== '' && ! t;
+                                        const needService = missing[line.key] || lineError(i, 'tariff_id') || lineError(i, 'description');
 
                                         return (
-                                            <tr key={line.key} className={`line${t ? '' : ' is-empty'}`}>
+                                            <tr key={line.key} className={`line${t || manual ? '' : ' is-empty'}${manual ? ' manual' : ''}`}>
                                                 <td className="line-no">{i + 1}</td>
                                                 <td>
                                                     {/* service or item first: the lists after it only show that type */}
                                                     <select value={line.type} aria-label="Type"
-                                                            onChange={(e) => { setLine(line.key, { type: e.target.value, category: '', tariff_id: '', code: '', unit_price: '' }); setFocus([line.key, 'category']); }}
+                                                            onChange={(e) => {
+                                                                // a manual line stays manual (it has no tariff to match); a tariff line starts over
+                                                                setLine(line.key, manual ? { type: e.target.value } : { type: e.target.value, category: '', tariff_id: '', code: '', unit_price: '' });
+                                                                setFocus([line.key, manual ? 'service' : 'category']);
+                                                            }}
                                                             onKeyDown={enterTo(line.key, 'category')}>
                                                         {Object.entries(types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                                                     </select>
@@ -288,13 +393,23 @@ export default function Create({ number, today, customers, tariffs, types, quota
                                                 <td>
                                                     <select ref={lineRef(line.key, 'category')} value={line.category} aria-label="Category"
                                                             className={needService && ! line.category ? 'is-invalid' : ''}
-                                                            onChange={(e) => { setLine(line.key, { category: e.target.value, tariff_id: '', code: '', unit_price: '' }); setFocus([line.key, 'service']); }}
+                                                            onChange={(e) => chooseCategory(line, e.target.value)}
                                                             onKeyDown={enterTo(line.key, 'service')}>
                                                         <option value="">{categoriesFor(line.type).length ? 'Choose…' : `No ${line.type === 'item' ? 'items' : 'services'} yet`}</option>
                                                         {categoriesFor(line.type).map((c) => <option key={c} value={c}>{c === NONE ? 'Other (no category)' : c}</option>)}
+                                                        <optgroup label="Not in the tariff">
+                                                            <option value={MANUAL}>✎ Manual entry</option>
+                                                        </optgroup>
                                                     </select>
                                                 </td>
                                                 <td className="svc-cell">
+                                                    {manual ? (
+                                                        <input ref={lineRef(line.key, 'service')} value={line.description} maxLength={500} aria-label="Description"
+                                                               placeholder={`Describe the ${line.type === 'item' ? 'item' : 'service'}`}
+                                                               className={needService && ! line.description.trim() ? 'is-invalid' : ''}
+                                                               onChange={(e) => { setLine(line.key, { description: e.target.value }); setMissing((m) => ({ ...m, [line.key]: false })); }}
+                                                               onKeyDown={enterTo(line.key, 'uom')} />
+                                                    ) : (
                                                     <select ref={lineRef(line.key, 'service')} value={line.tariff_id} aria-label="Service or item"
                                                             disabled={! line.category} className={needService && line.category ? 'is-invalid' : ''}
                                                             onChange={(e) => { const picked = byId(e.target.value); if (picked) choose(line, picked); }}
@@ -306,19 +421,68 @@ export default function Create({ number, today, customers, tariffs, types, quota
                                                             </optgroup>
                                                         ) : g.items.map((x) => <option key={x.id} value={x.id}>{x.description} — ₱{plain(x.price)}</option>)))}
                                                     </select>
-                                                    {t && <div className="unit">{t.subcategory ? `${t.subcategory} · ` : ''}{t.unit ? `per ${t.unit.toLowerCase()}` : ''}</div>}
+                                                    )}
+                                                    {manual && <div className="unit">Manual line · not from the tariff</div>}
+                                                    {t && <div className="unit">{t.subcategory ? `${t.subcategory} · ` : ''}{t.unit ? (Number(t.price) === 0 ? t.unit : `per ${t.unit.toLowerCase()}`) : ''}</div>}
+                                                    {(t || manual) && (
+                                                        <input className={`line-note${lineError(i, 'note') ? ' is-invalid' : ''}`} value={line.note ?? ''} maxLength={500}
+                                                               placeholder="Note on the printout (optional) — e.g. Lay days: July 02 to July 31"
+                                                               aria-label="Note on the printout" onChange={(e) => setLine(line.key, { note: e.target.value })} />
+                                                    )}
                                                 </td>
                                                 <td>
-                                                    <input ref={lineRef(line.key, 'code')} className={`code-input${unknownCode ? ' is-invalid' : ''}`} list="tariffCodes"
-                                                           value={line.code} placeholder="auto" aria-label="Code" autoComplete="off"
-                                                           title={unknownCode ? 'No service has this code' : 'Fills in by itself, or type a code'}
-                                                           onChange={(e) => typeCode(line, e.target.value)} onKeyDown={enterTo(line.key, 'qty')} />
+                                                    {manual ? <span className="manual-tag" title="Typed by hand, not from the tariff">Manual</span> : (
+                                                        <input ref={lineRef(line.key, 'code')} className={`code-input${unknownCode ? ' is-invalid' : ''}`} list="tariffCodes"
+                                                               value={line.code} placeholder="auto" aria-label="Code" autoComplete="off"
+                                                               title={unknownCode ? 'No service has this code' : 'Fills in by itself, or type a code'}
+                                                               onChange={(e) => typeCode(line, e.target.value)} onKeyDown={enterTo(line.key, 'qty')} />
+                                                    )}
                                                 </td>
-                                                <td className="uom">{t?.uom ?? '—'}</td>
+                                                {manual ? (
+                                                    <td>
+                                                        <input ref={lineRef(line.key, 'uom')} className={`uom-input${lineError(i, 'uom') ? ' is-invalid' : ''}`} value={line.uom}
+                                                               maxLength={20} placeholder="e.g. lot" aria-label="UOM" title='Type "Pax / Day" for a unit in two parts'
+                                                               onChange={(e) => setLine(line.key, { uom: e.target.value })}
+                                                               onBlur={() => { const s = splitUnit(line.uom); if (s) setLine(line.key, { ...s, show2: true }); }}
+                                                               onKeyDown={enterTo(line.key, 'qty')} />
+                                                    </td>
+                                                ) : <td className="uom">{unitLabel(t)}</td>}
                                                 <td>
-                                                    <input ref={lineRef(line.key, 'qty')} type="number" className={`qty${lineError(i, 'qty') ? ' is-invalid' : ''}`}
-                                                           min="0.01" step="0.01" aria-label="Quantity" value={line.qty}
-                                                           onChange={(e) => setLine(line.key, { qty: e.target.value })} onKeyDown={enterTo(line.key, 'price')} />
+                                                    {/* hour blocks ("8 Hrs") are typed in hours: the box says so, like "[ 10 ] Day" beside it */}
+                                                    <span className={hrs1 ? 'qty2' : undefined}>
+                                                        <input ref={lineRef(line.key, 'qty')} type="number" className={`qty${lineError(i, 'qty') ? ' is-invalid' : ''}`}
+                                                               min="0.01" step="0.01" aria-label={hrs1 ? 'Hours' : 'Quantity'} value={line.qty}
+                                                               title={usesLoa(t) && Number(data.loa) > 0 ? `Vessel L.O.A. is ${Number(data.loa)} m` : undefined}
+                                                               onChange={(e) => setLine(line.key, { qty: e.target.value })} onKeyDown={enterTo(line.key, has2 ? 'qty2' : 'price')} />
+                                                        {hrs1 && <span className="uom">hrs</span>}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    {has2 ? (
+                                                        <>
+                                                            <span className="qty2">
+                                                                <input ref={lineRef(line.key, 'qty2')} type="number" className={`qty${lineError(i, 'qty2') ? ' is-invalid' : ''}`}
+                                                                       min="0.01" step="0.01" aria-label={hrs2 ? 'Hours' : (unit2 || 'Second quantity')} value={line.qty2}
+                                                                       placeholder={String(hrs2 || 1)}
+                                                                       onChange={(e) => setLine(line.key, { qty2: e.target.value })} onKeyDown={enterTo(line.key, manual ? 'uom2' : 'price')} />
+                                                                {manual ? (
+                                                                    <input ref={lineRef(line.key, 'uom2')} value={line.uom2} maxLength={20} placeholder="e.g. Day" aria-label="Second unit"
+                                                                           className={`uom2-input${missing[`${line.key}:uom2`] || lineError(i, 'uom2') ? ' is-invalid' : ''}`}
+                                                                           onChange={(e) => { setLine(line.key, { uom2: e.target.value }); setMissing((m) => ({ ...m, [`${line.key}:uom2`]: false })); }}
+                                                                           onKeyDown={enterTo(line.key, 'price')} />
+                                                                ) : <span className="uom">{hrs2 ? 'hrs' : unit2}</span>}
+                                                                {manual && (
+                                                                    <button type="button" className="unit2-x" title="Remove the second unit" aria-label="Remove the second unit"
+                                                                            onClick={() => setLine(line.key, { uom2: '', qty2: '', show2: false })}><Icon name="x" size={13} /></button>
+                                                                )}
+                                                            </span>
+                                                        </>
+                                                    ) : manual ? (
+                                                        <button type="button" className="add-unit2" title="For a unit in two parts, e.g. Pax / Day: both quantities are multiplied"
+                                                                onClick={() => { setLine(line.key, { show2: true }); setFocus([line.key, 'qty2']); }}>
+                                                            <Icon name="plus" size={13} /> 2nd unit
+                                                        </button>
+                                                    ) : <span className="muted">—</span>}
                                                 </td>
                                                 <td>
                                                     <input ref={lineRef(line.key, 'price')} type="number" className={`price${lineError(i, 'unit_price') ? ' is-invalid' : ''}`}
@@ -330,6 +494,8 @@ export default function Create({ number, today, customers, tariffs, types, quota
                                                                const next = data.lines[i + 1];
                                                                next ? setFocus([next.key, 'service']) : addLine(line.type);
                                                            }} />
+                                                    {/* what the price buys, when hours are involved: "per 8 hrs per day" */}
+                                                    {(hrs1 || hrs2) && <div className="unit price-per">per {perText(unit1, unit2)}</div>}
                                                     {priceChanged && (
                                                         <button type="button" className="price-hint" title="Use the list price"
                                                                 onClick={() => setLine(line.key, { unit_price: Number(t.price).toFixed(2) })}>
@@ -348,7 +514,7 @@ export default function Create({ number, today, customers, tariffs, types, quota
                                 </tbody>
                                 {data.lines.length === 0 && (
                                     <tbody className={`empty-lines${emptyAlert ? ' attention' : ''}`}>
-                                        <tr><td colSpan={10}>{emptyAlert ? 'Add at least one service or item before saving.' : 'No lines yet. Add the services and items the customer asked for.'}</td></tr>
+                                        <tr><td colSpan={11}>{emptyAlert ? 'Add at least one service or item before saving.' : 'No lines yet. Add the services and items the customer asked for.'}</td></tr>
                                     </tbody>
                                 )}
                             </table>
@@ -356,6 +522,9 @@ export default function Create({ number, today, customers, tariffs, types, quota
                         <div className="add-row">
                             <button type="button" className="btn btn-sm" onClick={() => addLine('service')}><Icon name="wrench" size={16} /> Add service</button>
                             <button type="button" className="btn btn-sm" onClick={() => addLine('item')}><Icon name="package" size={16} /> Add item</button>
+                            <button type="button" className="btn btn-sm" onClick={() => addLine('service', true)} title="A line that is not in the tariff: type the description, UOM and price yourself">
+                                <Icon name="pencil" size={16} /> Add manual line
+                            </button>
                         </div>
 
                         <div className="lines-foot">
@@ -400,6 +569,9 @@ export default function Create({ number, today, customers, tariffs, types, quota
                         {totals.filled} {totals.filled === 1 ? 'line' : 'lines'}{totals.percent ? ` · ${totals.percent}% discount` : ''}
                     </div>
                     <div className="actions">
+                        {/* always on screen: add a line without scrolling to the end of a long quotation */}
+                        <button type="button" className="btn btn-on-dark" onClick={() => addLine(data.lines.at(-1)?.type ?? 'service')}
+                                title="Add a line at the end and jump to it"><Icon name="plus" /> Add line</button>
                         <Link href={backTo} className="btn btn-ghost">Cancel</Link>
                         <button type="submit" className="btn btn-amber" disabled={processing}>
                             <Icon name="check" /> {processing ? 'Saving…' : (quotation ? 'Save changes' : 'Save quotation')}

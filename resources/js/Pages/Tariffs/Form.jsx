@@ -8,7 +8,7 @@ import { marginClass } from './Index';
 export default function Form({ tariff, type, groups = {}, preset = {} }) {
     const form = useForm(tariff ?? {
         type, category: preset.category ?? '', subcategory: preset.subcategory ?? '',
-        code: '', description: '', uom: '', unit: '', cost: '0', price: '0', active: true,
+        code: '', description: '', uom: '', uom2: '', unit: '', cost: '0', price: '0', active: true,
     });
     const { data, setData, errors, processing } = form;
     const messages = [...new Set(Object.values(errors))];
@@ -29,7 +29,7 @@ export default function Form({ tariff, type, groups = {}, preset = {} }) {
         <AppLayout title={tariff ? `Edit ${tariff.code}` : 'Add tariff'} active={`tariff-${data.type}`}>
             <div className="page-head">
                 <div>
-                    <div className="eyebrow"><Link href={listUrl}><Icon name="chevron-left" size={14} /> {(tariff?.type ?? type) === 'item' ? 'Item' : 'Service'} tariff</Link></div>
+                    <div className="eyebrow"><Link href={listUrl}><Icon name="chevron-left" size={14} /> Tariff · {(tariff?.type ?? type) === 'item' ? 'Items' : 'Services'}</Link></div>
                     <h1>{tariff ? `Edit ${tariff.code}` : 'Add tariff'}</h1>
                 </div>
             </div>
@@ -75,14 +75,19 @@ export default function Form({ tariff, type, groups = {}, preset = {} }) {
                                 <label htmlFor="uom">UOM</label>
                                 <input {...field('uom')} placeholder="hr, pc, sqm, lot" />
                             </div>
-                            <div className="field span-2">
-                                <label htmlFor="description">Description</label>
-                                <input {...field('description')} />
+                            <div className="field">
+                                <label htmlFor="uom2">UOM 2 <span className="muted">(optional)</span></label>
+                                <input {...field('uom2')} placeholder="e.g. Day" />
+                                <span className="hint">For units in two parts like Pax / Day: on a quotation both quantities are multiplied.</span>
                             </div>
-                            <div className="field span-2">
+                            <div className="field">
                                 <label htmlFor="unit">Unit name</label>
                                 <input {...field('unit')} placeholder="e.g. Hour, Piece, Square meter" />
                                 <span className="hint">The full name of the unit of measure.</span>
+                            </div>
+                            <div className="field span-2">
+                                <label htmlFor="description">Description</label>
+                                <input {...field('description')} />
                             </div>
                         </div>
                     </div>

@@ -75,8 +75,10 @@ Each step creates or updates one document, and every document links to the other
 
 ### Master data
 - **Customer profiles**: name, address, contact person, contact no., email and default **discount %**.
-- **Service tariff / Item tariff**: category, sub-category, code, description, UOM, unit name, **cost** (internal) and **selling price**.
-  - Shown as a **folder tree**: categories open into sub-categories, which open into the entries. Category rows summarize UOM, cost, price range and margin, and have an **Add** button that pre-fills the category.
+- **Tariff** (one menu entry, with a **Services / Items** switch on the page): category, sub-category, code, description, UOM, optional **UOM 2**, unit name, **cost** (internal) and **selling price**.
+  - Shown as a **folder tree** in the sheet's order: categories open into sub-categories, which open into the entries. Category rows summarize UOM, cost, price range and margin, and have an **Add** button that pre-fills the category.
+  - **Shipyard tariff**: 379 services loaded from *Tariff-Table 2.0* (Sheet2) exactly as written — Category, Sub Cat, Desc, UOM and Price, one line per sheet row (codes `A-001` … `G-007`).
+  - **UOM 2**: a unit in two parts such as `Pax / Day` or `8 Hrs / Day`; on a quotation **qty × 2nd qty × price** (12 pax × 30 days × ₱70 = ₱25,200).
   - Margin column ("cost not set" until a cost is entered) and a live profit/margin preview on the form.
   - Inactive tariffs stay on old quotations but can't be picked on new ones.
 
@@ -102,6 +104,13 @@ Quotation, job order and invoice pages all use the same layout:
 
 **Tips**
 - Painting is priced per sqm *per coat*: enter quantity = area × coats (500 sqm × 2 coats = 1,000).
+- Two-part units (`Pax / Day`, `8 Hrs / Day`, `Unit / 8Hrs`…) show a **× 2nd qty** box; leave it empty to count 1.
+- **Hour blocks are typed in hours.** A unit like `8 Hrs` or `24 Hrs` is priced per block, so its box takes hours and QJOMS converts: 16 hours of `8 Hrs / Day` = 2 blocks (16 hrs × 10 days × ₱50 = ₱1,000). It starts at one block (8). For `Unit / 8Hrs` the 2nd box is hours (24 hrs = 3 shifts). A plain `Hr` is already hours. The printout shows "16 hrs × 10 Day".
+- A **manual line** can have a unit in two parts too: press **+ 2nd unit** in its "× 2nd qty" column (quantity + unit name, e.g. Day), or type `Pax / Day` in its UOM box.
+- Each line has an optional **note** under the service (e.g. "Lay days: July 02 to July 31"); it prints under the line's description.
+- Not in the tariff? Choose **✎ Manual entry** in a line's Category list (or press **Add manual line**) and type the description, UOM, quantity and price yourself. Manual lines work for services and items, show a *Manual* tag instead of a code, and have no cost (so they count fully as profit in the staff-only box).
+- **Vessel particulars & dates** on a quotation are optional and printed only when filled in. The **L.O.A.** fills in the quantity of drydocking and wharfage lines priced per LM (lay days stay days × price).
+- Dates are picked on the QJOMS calendar: click the box, use ‹ › for months or click the month title to jump to another month/year; keyboard arrows + Enter work too.
 - Type a category word (e.g. "gritblasting") in the tariff search to find a whole group.
 - Every list row can be **Ctrl+clicked** to open in a new tab.
 
@@ -127,12 +136,25 @@ Quotation, job order and invoice pages all use the same layout:
 - **SQL injection**: all queries use bound parameters; the few raw SQL fragments contain no user input.
 - **XSS**: React and Blade escape all text.
 - **Activity history** records the signed-in user for every change.
+- **Change password**: account menu → *Change password* (asks for the current password; at least 8 characters; 5 tries a minute).
+- **Browser protection headers** on every page (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`; `Strict-Transport-Security` on HTTPS).
+- **Amount limits**: quantities, prices and totals larger than the database can hold are refused with a message instead of a server error.
 - `.env` (database settings, app key) is excluded from Git.
 
 **Before going live**
-- Change the default admin password (`admin@example.com` / `password` is for development only).
-- In `.env` set `APP_ENV=production` and `APP_DEBUG=false`.
+- Sign in and **change the admin password** right away (account menu → *Change password*); `admin@example.com` / `password` is only the starting password.
+- In `.env` set `APP_ENV=production`, `APP_DEBUG=false`, `LOG_LEVEL=error` and, on HTTPS, `SESSION_SECURE_COOKIE=true`.
 - Run under a proper web server (IIS or Apache) with HTTPS instead of `php artisan serve`.
+
+**Deploying an update** (e.g. Plesk)
+```bash
+git pull
+composer install --no-dev --optimize-autoloader
+npm ci && npm run build                       # public/build is not in Git
+php artisan migrate --force                   # keeps existing data
+php artisan db:seed --class=MssaiTariffSeeder --force   # shipyard tariff; safe to run again, keeps edited prices
+php artisan optimize
+```
 
 ---
 
@@ -179,7 +201,7 @@ While editing React pages, run `npm run dev` in a second terminal instead of reb
 ```bash
 php artisan test
 ```
-Covers the full quote-to-cash flow, billing and payments, history, master data, sign-in and rate limiting. Tests use their own in-memory database and never touch real data.
+Covers the full quote-to-cash flow, billing and payments, history, master data, sign-in and rate limiting, two-part units and the shipyard tariff loader, change password, protection headers and amount limits (19 tests). Tests use their own in-memory database and never touch real data.
 
 ---
 
@@ -190,7 +212,8 @@ Covers the full quote-to-cash flow, billing and payments, history, master data, 
 | `php artisan migrate` | Apply new database changes, **keeping** existing data |
 | `php artisan migrate:fresh` | ⚠️ Delete **everything** and recreate empty tables |
 | `php artisan migrate:fresh --seed` | ⚠️ Delete everything, then add the admin account + 3 sample customers + 6 sample tariffs |
-| `php artisan db:seed --class=LiveSeeder` | **Live server start:** admin account + NSRMS customer + NSRMS tariff, no sample data (safe to run again) |
+| `php artisan db:seed --class=LiveSeeder` | **Live server start:** admin account + NSRMS customer + NSRMS tariff + shipyard tariff, no sample data (safe to run again) |
+| `php artisan db:seed --class=MssaiTariffSeeder` | Load the shipyard tariff from `database/data/mssai-tariff.json` (379 services from *Tariff-Table 2.0*; safe to run again, keeps prices and costs already changed) |
 | `php artisan db:seed --class=AdminUserSeeder` | Add the admin account (safe to run again) |
 | `php artisan db:seed --class=NsrmsCustomerSeeder` | Add the Norman Ship Repair & Machine Shop customer profile (safe to run again) |
 | `php artisan db:seed --class=NsrmsTariffSeeder` | Load the NSRMS *Hull, Hold & Tank Preservation* tariff (20 services; safe to run again, keeps costs already entered) |
@@ -216,9 +239,9 @@ DELETE FROM quotations;
 | Path | What it holds |
 |---|---|
 | `resources/js/app.jsx` | Starts React and finds the pages |
-| `resources/js/Pages/` | One file per screen: `Dashboard`, `Auth/Login`, `Quotations/` (Index, Show, Create — also used for Revise), `JobOrders/` (Index, Show), `Invoices/` (Index, Show), `Customers/` (Index, Form), `Tariffs/` (Index, Form) |
+| `resources/js/Pages/` | One file per screen: `Dashboard`, `Auth/Login`, `Account/Password`, `Quotations/` (Index, Show, Create — also used for Revise), `JobOrders/` (Index, Show), `Invoices/` (Index, Show), `Customers/` (Index, Form), `Tariffs/` (Index, Form) |
 | `resources/js/Layouts/AppLayout.jsx` | Top menu (with Master data and account menus), phone menu, messages |
-| `resources/js/Components/` | `Icon`, `format` (₱ money), `ConfirmDialog`, `Pager`, `QuotationDetails`, `History`, `DocFlow` (document flow strip) |
+| `resources/js/Components/` | `Icon`, `format` (₱ money), `ConfirmDialog`, `Pager`, `QuotationDetails`, `History`, `DocFlow` (document flow strip), `DateInput` (QJOMS calendar) |
 | `resources/views/app.blade.php` | The HTML page React loads into |
 | `resources/views/quotations/print.blade.php` | Printable quotation / job order |
 | `resources/views/invoices/print.blade.php` | Printable invoice |
@@ -228,12 +251,14 @@ DELETE FROM quotations;
 | Path | What it holds |
 |---|---|
 | `routes/web.php` | Which URL goes to which controller; sign-in and the `auth` group |
-| `app/Http/Controllers/` | `Auth`, `Dashboard`, `Quotation`, `JobOrder`, `Invoice`, `Payment`, `Customer`, `Tariff` |
+| `app/Http/Controllers/` | `Auth`, `Account`, `Dashboard`, `Quotation`, `JobOrder`, `Invoice`, `Payment`, `Customer`, `Tariff` |
 | `app/Http/Middleware/HandleInertiaRequests.php` | Data shared with every page (signed-in user, messages, menu counts) |
+| `app/Http/Middleware/SecurityHeaders.php` | Browser protection headers on every page |
 | `app/Models/` | `User`, `Customer`, `Tariff`, `Quotation`, `QuotationLine`, `JobOrder`, `Invoice`, `Payment`, `Activity` |
 | `database/migrations/` | Table definitions |
-| `database/seeders/` | `DatabaseSeeder` (dev samples), `LiveSeeder` (live start), `AdminUserSeeder`, `NsrmsCustomerSeeder`, `NsrmsTariffSeeder`, `DemoSeeder` |
-| `tests/Feature/` | `QuotationFlowTest`, `LoginTest` |
+| `database/seeders/` | `DatabaseSeeder` (dev samples), `LiveSeeder` (live start), `AdminUserSeeder`, `NsrmsCustomerSeeder`, `NsrmsTariffSeeder`, `MssaiTariffSeeder`, `DemoSeeder` |
+| `database/data/mssai-tariff.json` | The shipyard tariff, one entry per row of *Tariff-Table 2.0* (with its sheet row number) |
+| `tests/Feature/` | `QuotationFlowTest`, `LoginTest`, `ShipyardTariffTest`, `SecurityTest` |
 
 ---
 
@@ -243,9 +268,9 @@ DELETE FROM quotations;
 |---|---|
 | `users` | Accounts that can sign in |
 | `customers` | Customer profiles and default discount % |
-| `tariffs` | Services and items: type, category, sub-category, code, description, UOM, unit, cost, price, active |
-| `quotations` | Quotation header, copied customer details, totals, status (pending / approved) |
-| `quotation_lines` | Lines of a quotation (copied code, description, UOM, qty, cost, price) |
+| `tariffs` | Services and items: type, category, sub-category, code, description, UOM, UOM 2, unit, cost, price, active |
+| `quotations` | Quotation header, copied customer details, vessel particulars & dates, totals, status (pending / approved) |
+| `quotation_lines` | Lines of a quotation (copied code, description, optional note, UOM, UOM 2, qty, 2nd qty, cost, price) |
 | `job_orders` | One per approved quotation; status (open / ongoing / completed / billed) |
 | `invoices` | One per billed job order; dates, amount, notes |
 | `payments` | Payments received against an invoice |
@@ -254,7 +279,7 @@ DELETE FROM quotations;
 ---
 
 ## Roadmap
-- **User roles** (Admin / Sales / Manager / Billing) and a screen to manage accounts and passwords
+- **User roles** (Admin / Sales / Manager / Billing) and a screen to manage other users' accounts
 - Hide cost and profit from roles that shouldn't see them
 - Cancel / void an approved quotation (kept on record)
 - Company header and logo on printouts

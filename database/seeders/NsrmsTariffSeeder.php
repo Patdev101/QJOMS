@@ -46,6 +46,7 @@ class NsrmsTariffSeeder extends Seeder
                 $tariff = Tariff::firstOrNew(['code' => "{$code}-{$suffix}"]);
                 $tariff->fill([
                     'type' => 'service',
+                    'section' => 'II. Hull, Hold & Tank Preservation', // main heading of the NSRMS sheet
                     'category' => $category,
                     'subcategory' => $subcategory,
                     'description' => "{$description} — {$area}",

@@ -15,24 +15,30 @@ class TariffController extends Controller
 
         // grouped like the supplier's sheet: category › sub-category › code
         $tariffs = Tariff::where('type', $type)
+            ->when($request->section, fn ($q, $s) => $s === '__none__' ? $q->whereNull('section') : $q->where('section', $s))
             ->when($request->category, fn ($q, $c) => $q->where('category', $c))
             ->when($request->q, fn ($q, $s) => $q->where(fn ($w) => $w
                 ->where('code', 'like', "%{$s}%")
                 ->orWhere('description', 'like', "%{$s}%")
                 ->orWhere('category', 'like', "%{$s}%")
                 ->orWhere('subcategory', 'like', "%{$s}%")))
+            // main categories (sheet sections) first, in the sheet's order; tariffs without one last
+            ->orderByRaw('case when section is null then 1 else 0 end')
+            ->orderBy('section') // "A. …" to "G. …", then "II. Hull, Hold & Tank Preservation"
             ->orderByRaw('case when category is null then 1 else 0 end')
-            ->orderBy('category')
+            // categories in the supplier's sheet order (by their first code), not A–Z
+            ->orderByRaw('(select min(t2.code) from tariffs t2 where t2.type = tariffs.type and t2.category = tariffs.category)')
             ->orderBy('code') // codes follow the supplier's sheet, so items keep the sheet's order
             ->paginate(500) // shown as a folder tree, so a whole category stays on one page
             ->withQueryString()
             ->through(fn ($t) => [
                 'id' => $t->id,
+                'section' => $t->section,
                 'category' => $t->category,
                 'subcategory' => $t->subcategory,
                 'code' => $t->code,
                 'description' => $t->description,
-                'uom' => $t->uom,
+                'uom' => Tariff::unitLabel($t->uom, $t->uom2),
                 'unit' => $t->unit,
                 'cost' => (float) $t->cost,
                 'price' => (float) $t->price,
@@ -47,8 +53,9 @@ class TariffController extends Controller
             'type' => $type,
             'types' => Tariff::TYPES,
             'counts' => ['service' => $counts['service'] ?? 0, 'item' => $counts['item'] ?? 0],
-            'categories' => Tariff::where('type', $type)->whereNotNull('category')->distinct()->orderBy('category')->pluck('category'),
-            'filters' => ['q' => $request->q ?? '', 'category' => $request->category ?? ''],
+            // the filter lists main categories (A. DRY DOCKING AND UNDOCKING …) in the sheet's order
+            'sections' => Tariff::where('type', $type)->whereNotNull('section')->distinct()->orderBy('section')->pluck('section'),
+            'filters' => ['q' => $request->q ?? '', 'section' => $request->section ?? '', 'category' => $request->category ?? ''],
         ]);
     }
 
@@ -81,6 +88,7 @@ class TariffController extends Controller
                 'code' => $tariff->code,
                 'description' => $tariff->description,
                 'uom' => $tariff->uom,
+                'uom2' => (string) $tariff->uom2,
                 'unit' => (string) $tariff->unit,
                 'cost' => number_format($tariff->cost, 2, '.', ''),
                 'price' => number_format($tariff->price, 2, '.', ''),
@@ -128,16 +136,19 @@ class TariffController extends Controller
     {
         $data = $request->validate([
             'type' => ['required', Rule::in(array_keys(Tariff::TYPES))],
-            'category' => 'nullable|string|max:100',
-            'subcategory' => 'nullable|string|max:100',
+            'category' => 'nullable|string|max:255',
+            'subcategory' => 'nullable|string|max:500',
             'code' => ['required', 'string', 'max:50', Rule::unique('tariffs')->ignore($tariff)],
-            'description' => 'required|string|max:255',
-            'uom' => 'required|string|max:20',
+            'description' => 'required|string|max:500',
+            'uom' => 'nullable|string|max:20', // some shipyard tariff lines have no unit in the sheet
+            'uom2' => 'nullable|string|max:20',
             'unit' => 'nullable|string|max:50',
-            'cost' => 'required|numeric|min:0',
-            'price' => 'required|numeric|min:0',
+            // the largest amount the database column holds (12 digits, 2 after the point)
+            'cost' => 'required|numeric|min:0|max:9999999999.99',
+            'price' => 'required|numeric|min:0|max:9999999999.99',
         ]);
 
+        $data['uom'] ??= '';
         $data['active'] = $request->boolean('active');
 
         return $data;

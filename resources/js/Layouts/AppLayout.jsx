@@ -43,10 +43,12 @@ export default function AppLayout({ title, active, children }) {
     ];
     const masterData = [
         { key: 'customers', href: '/customers', icon: 'users', label: 'Customer profiles', hint: 'Contacts and discounts' },
-        { key: 'tariff-service', href: '/tariffs?type=service', icon: 'wrench', label: 'Service tariff', hint: 'Work you charge for' },
-        { key: 'tariff-item', href: '/tariffs?type=item', icon: 'package', label: 'Item tariff', hint: 'Materials and parts' },
+        // one entry: the tariff page itself switches between services and items
+        { key: 'tariff', href: '/tariffs?type=service', icon: 'wrench', label: 'Tariff', hint: 'Services and items you charge for' },
     ];
-    const inMasterData = masterData.some((link) => link.key === active);
+    // tariff pages say "tariff-service" / "tariff-item"; both belong to the one Tariff entry
+    const isActive = (key) => active === key || (key === 'tariff' && String(active).startsWith('tariff-'));
+    const inMasterData = masterData.some((link) => isActive(link.key));
     const badge = (link) => (link.count ? <span className={`count${link.soft ? ' soft' : ''}`} title={link.countTitle}>{link.count}</span> : null);
 
     // "Master data" drop-down: closes on a click elsewhere, Escape, or after picking a page
@@ -91,7 +93,7 @@ export default function AppLayout({ title, active, children }) {
                             </button>
                             <div className="dropdown-menu">
                                 {masterData.map((link) => (
-                                    <Link key={link.key} href={link.href} className={active === link.key ? 'active' : ''}>
+                                    <Link key={link.key} href={link.href} className={isActive(link.key) ? 'active' : ''}>
                                         <span className="dd-ic"><Icon name={link.icon} size={18} /></span>
                                         <span><b>{link.label}</b><small>{link.hint}</small></span>
                                     </Link>
@@ -114,6 +116,7 @@ export default function AppLayout({ title, active, children }) {
                                         <span className="avatar">{initials}</span>
                                         <span><b>{user.name}</b><small>{user.email}</small></span>
                                     </div>
+                                    <Link href="/account/password" className="account-item"><Icon name="lock" size={16} /> Change password</Link>
                                     <button type="button" className="account-item" onClick={signOut}><Icon name="arrow-right" size={16} /> Sign out</button>
                                 </div>
                             </div>
@@ -136,7 +139,7 @@ export default function AppLayout({ title, active, children }) {
                     ))}
                     <div className="nav-group">Master data</div>
                     {masterData.map((link) => (
-                        <Link key={link.key} href={link.href} className={active === link.key ? 'active' : ''}>
+                        <Link key={link.key} href={link.href} className={isActive(link.key) ? 'active' : ''}>
                             <Icon name={link.icon} /> {link.label}
                         </Link>
                     ))}
@@ -144,6 +147,7 @@ export default function AppLayout({ title, active, children }) {
                 <div className="sidebar-foot">
                     {user && <div style={{ color: '#fff', fontWeight: 600 }}>{user.name}<div style={{ fontWeight: 400 }}>{user.email}</div></div>}
                     {today}
+                    {user && <Link href="/account/password" className="signout" style={{ marginTop: 10, display: 'block', textAlign: 'center', textDecoration: 'none' }}>Change password</Link>}
                     {user && <button type="button" className="signout" style={{ marginTop: 10 }} onClick={signOut}>Sign out</button>}
                 </div>
             </aside>
